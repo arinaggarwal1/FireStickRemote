@@ -1,0 +1,20 @@
+[Unit]
+Description=Fire TV Remote Web Application
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=username
+Group=username
+WorkingDirectory=/home/username/FireTV Remote
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=9090
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

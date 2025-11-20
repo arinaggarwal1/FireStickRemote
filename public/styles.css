@@ -1,0 +1,398 @@
+:root {
+  color-scheme: dark;
+  --gap: 20px;
+  --round-sm: 56px;
+  --round-md: 72px;
+  --round-lg: 88px;
+  --dpad-select: 132px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #0b0d10;
+  color: #e6e9ef;
+  /* Prevent double-tap zoom on mobile */
+  touch-action: manipulation;
+}
+header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #1c1f26;
+}
+
+.device-controls-expanded {
+  padding: 12px 16px;
+  background: #12151b;
+  border-bottom: 1px solid #1c1f26;
+  display: flex;
+  justify-content: center;
+}
+
+.device-controls-expanded .device-config {
+  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+}
+
+.device-controls-expanded .manual-input input {
+  min-width: 120px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #2a3140;
+  padding: 2px;
+  object-fit: cover;
+  border: 1px solid #3a4550;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+.device-config {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.manual-input {
+  display: flex;
+  align-items: center;
+}
+
+.manual-input input {
+  background: #12151b;
+  color: #e6e9ef;
+  border: 1px solid #20242c;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+.manual-input input:focus {
+  outline: none;
+  border-color: #3a4550;
+  box-shadow: 0 0 0 2px rgba(58, 69, 80, 0.2);
+}
+select {
+  background: #12151b;
+  color: #e6e9ef;
+  border: 1px solid #20242c;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+button {
+  background: #1a1f2a;
+  color: #e6e9ef;
+  border: 1px solid #2a3140;
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+button:active {
+  transform: translateY(1px);
+  background: #232a38;
+}
+button.connecting {
+  background: #2a3c1a;
+  border-color: #3d5a2a;
+  color: #c8e6a8;
+  opacity: 0.8;
+}
+button.connected {
+  background: #0f3c22;
+  border-color: #1b6b3d;
+  color: #b8ffd6;
+}
+button.disconnected {
+  background: #3c1010;
+  border-color: #6b1b1b;
+  color: #ffd0d0;
+}
+main {
+  padding: 8px 16px;
+}
+.remote {
+  width: min(420px, 92vw);
+  margin: 0 auto;
+  display: grid;
+  gap: var(--gap);
+  justify-items: center;
+}
+.top-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  width: 100%;
+}
+.top-bar .btn { justify-self: start; }
+#indicator {
+  justify-self: end;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #1c2533;
+  box-shadow: 0 0 0 0 rgba(80,160,255,0);
+  transition: background .2s ease, box-shadow .4s ease;
+}
+#indicator.active {
+  background: #5cc4ff;
+  box-shadow: 0 0 20px 8px rgba(92,196,255,0.9);
+}
+.top-row { display: grid; grid-template-columns: 1fr; justify-items: center; width: 100%; }
+.row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+  width: 100%;
+  justify-items: center;
+}
+.nav-row .btn.round,
+.media-row .btn.round { width: var(--round-md); height: var(--round-md); border-radius: 999px; }
+.media-row .btn.round.lg { width: var(--round-lg); height: var(--round-lg); }
+.centered { width: 100%; display: grid; place-items: center; }
+.btn.round.sm { width: var(--round-sm); height: var(--round-sm); border-radius: 999px; }
+.btn.round.md { width: var(--round-md); height: var(--round-md); border-radius: 999px; }
+.btn.round.lg { width: var(--round-lg); height: var(--round-lg); border-radius: 999px; }
+.round .icon { margin: 0; }
+.btn.small {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.dpad {
+  /* Clean, uniform dpad layout */
+  --size: 200px;        /* outer circle diameter */
+  --select: 80px;       /* inner circle diameter */
+  --icon-size: 20px;    /* arrow icon size */
+  
+  /* Calculate quadrant size to fill space between outer and inner circles */
+  --ring-width: calc((var(--size) - var(--select)) / 2);
+  --quadrant-size: calc(var(--ring-width) * 1.4); /* Slightly larger for better touch */
+  
+  /* Position arrows at optimal distance from center */
+  --arrow-distance: calc((var(--size) / 2 + var(--select) / 2) / 2);
+  
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  margin: 0 auto;
+}
+
+.dpad-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: #1a1f2a;
+  border: 2px solid #2a3140;
+}
+
+.dpad-quadrant {
+  position: absolute;
+  width: var(--quadrant-size);
+  height: var(--quadrant-size);
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  /* Center the button on its position */
+  transform: translate(-50%, -50%);
+  /* Subtle visual feedback for touch area */
+  transition: background 0.15s ease;
+}
+
+/* Position quadrants at cardinal directions using consistent math */
+.dpad-quadrant.up {
+  top: calc(50% - var(--arrow-distance));
+  left: 50%;
+}
+
+.dpad-quadrant.right {
+  top: 50%;
+  left: calc(50% + var(--arrow-distance));
+}
+
+.dpad-quadrant.down {
+  top: calc(50% + var(--arrow-distance));
+  left: 50%;
+}
+
+.dpad-quadrant.left {
+  top: 50%;
+  left: calc(50% - var(--arrow-distance));
+}
+
+.dpad-quadrant .icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  filter: invert(90%);
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+  pointer-events: none; /* Prevent icon from blocking touch events */
+}
+
+.dpad-quadrant:hover {
+  background: rgba(35, 42, 56, 0.2);
+}
+
+.dpad-quadrant:hover .icon {
+  opacity: 0.9;
+}
+
+.dpad-quadrant:active {
+  background: rgba(35, 42, 56, 0.5);
+  transform: translate(-50%, -50%) scale(0.95);
+  transition: all 0.1s ease;
+}
+
+.dpad-quadrant:active .icon {
+  opacity: 1;
+}
+
+
+.select {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--select);
+  height: var(--select);
+  border-radius: 50%;
+  background: #2a3140;
+  border: 2px solid #3a4550;
+  cursor: pointer;
+  z-index: 10;
+  pointer-events: auto; /* Ensure click events work */
+}
+
+.select:active {
+  background: #232a38;
+  transform: translate(-50%, -50%); /* Prevent movement by maintaining center position */
+}
+
+/* Keyboard area */
+.keyboard {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+#status {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Icon + label layout */
+.btn .icon { width: 22px; height: 22px; margin: 0; filter: invert(90%); }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn .label {
+  line-height: 1;
+}
+
+/* Application buttons section */
+.app-section {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.app-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #a8b3c5;
+  margin: 0 0 12px 0;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.app-btn {
+  background: #1a1f2a;
+  color: #e6e9ef;
+  border: 1px solid #2a3140;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  transition: all 0.15s ease;
+}
+
+.app-btn:hover {
+  background: #232a38;
+  border-color: #3a4550;
+  transform: translateY(-1px);
+}
+
+.app-btn:active {
+  transform: translateY(1px);
+  background: #2a3140;
+}
+
+.app-logo {
+  max-width: 100%;
+  max-height: 32px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  filter: brightness(1.1) contrast(1.1);
+}
+
+/* Responsive tweaks */
+@media (max-width: 480px) {
+  :root {
+    --gap: 18px;
+    --round-sm: 60px;
+    --round-md: 76px;
+    --round-lg: 92px;
+    --dpad-select: 140px;
+  }
+  .dpad {
+    --size: 260px;
+    --select: 110px;
+    --icon-size: 24px;
+    /* Maintain same positioning and sizing formulas for consistency */
+    --ring-width: calc((var(--size) - var(--select)) / 2);
+    --quadrant-size: calc(var(--ring-width) * 1.4);
+    --arrow-distance: calc((var(--size) / 2 + var(--select) / 2) / 2);
+  }
+  
+  .app-logo {
+    max-height: 36px;
+  }
+}

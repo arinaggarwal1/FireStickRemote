@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Fire TV Remote</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="/favicon_io/site.webmanifest">
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="header-brand">
+          <img src="/favicon_io/remote_icon.png" alt="Remote" class="header-icon" />
+          <h1>Fire TV Remote</h1>
+        </div>
+        <div class="device-config" id="deviceConfig">
+            <select id="deviceSelect"></select>
+            <div class="manual-input" id="manualInput" style="display: none;">
+              <input type="text" id="manualHost" placeholder="192.168.1.65:5555" />
+            </div>
+            <button id="connectBtn">Connect</button>
+          </div>
+      </header>
+      
+      <div class="device-controls-expanded" id="deviceControlsExpanded" style="display: none;">
+        <div class="device-config">
+          <select id="deviceSelectExpanded"></select>
+          <div class="manual-input">
+            <input type="text" id="manualHostExpanded" placeholder="192.168.1.65:5555" />
+          </div>
+          <button id="connectBtnExpanded">Connect</button>
+        </div>
+      </div>
+
+      <main>
+        <section class="remote">
+          <div class="top-bar">
+            <button class="btn round sm" data-key="224" aria-label="Power">
+              <img class="icon" src="/icons/power.svg" alt="" />
+            </button>
+            <div id="indicator" aria-hidden="true"></div>
+          </div>
+
+          <div class="dpad">
+            <div class="dpad-ring">
+              <button class="dpad-quadrant up" data-key="19" aria-label="Up">
+                <img class="icon" src="/icons/arrow-up.svg" alt="" />
+              </button>
+              <button class="dpad-quadrant right" data-key="22" aria-label="Right">
+                <img class="icon" src="/icons/arrow-right.svg" alt="" />
+              </button>
+              <button class="dpad-quadrant down" data-key="20" aria-label="Down">
+                <img class="icon" src="/icons/arrow-down.svg" alt="" />
+              </button>
+              <button class="dpad-quadrant left" data-key="21" aria-label="Left">
+                <img class="icon" src="/icons/arrow-left.svg" alt="" />
+              </button>
+            </div>
+            <button class="btn select" data-key="23" aria-label="OK">
+            </button>
+          </div>
+
+          <div class="row nav-row">
+            <button class="btn round md" data-key="4" aria-label="Back">
+              <img class="icon" src="/icons/back.svg" alt="" />
+            </button>
+            <button class="btn round md" data-key="3" aria-label="Home">
+              <img class="icon" src="/icons/home.svg" alt="" />
+            </button>
+            <button class="btn round md" data-key="82" aria-label="Menu">
+              <img class="icon" src="/icons/menu.svg" alt="" />
+            </button>
+          </div>
+
+          <div class="app-section">
+            <h2 class="app-section-title">Apps</h2>
+            <div class="app-grid">
+              <button class="app-btn" data-app="prime" aria-label="Amazon Prime Video">
+                <img src="/icons/Amazon_Prime_Video.svg" alt="Prime Video" class="app-logo" />
+              </button>
+              <button class="app-btn" data-app="netflix" aria-label="Netflix">
+                <img src="/icons/Netflix.svg" alt="Netflix" class="app-logo" />
+              </button>
+              <button class="app-btn" data-app="youtube" aria-label="YouTube TV">
+                <img src="/icons/YouTube_TV.svg" alt="YouTube TV" class="app-logo" />
+              </button>
+              <button class="app-btn" data-app="hulu" aria-label="Hulu">
+                <img src="/icons/Hulu.svg" alt="Hulu" class="app-logo" />
+              </button>
+            </div>
+          </div>
+
+        </section>
+      </main>
+    </div>
+
+    <script src="/main.js"></script>
+  </body>
+</html>
