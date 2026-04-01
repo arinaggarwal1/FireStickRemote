@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <!-- Favicon -->
@@ -19,90 +19,290 @@
   </head>
   <body>
     <div id="app">
-      <header>
-        <div class="header-brand">
-          <img src="/favicon_io/remote_icon.png" alt="Remote" class="header-icon" />
-          <h1>Fire TV Remote</h1>
-        </div>
-        <div class="device-config" id="deviceConfig">
-            <select id="deviceSelect"></select>
-            <div class="manual-input" id="manualInput" style="display: none;">
-              <input type="text" id="manualHost" placeholder="192.168.1.65:5555" />
+      <header class="app-header">
+        <div class="hero-copy">
+          <div class="header-brand">
+            <img src="/favicon_io/remote_icon.png" alt="Remote" class="header-icon" />
+            <div class="brand-copy">
+              <span class="brand-kicker">Fire TV Control Deck</span>
+              <h1>Fire TV Remote</h1>
             </div>
-            <button id="connectBtn">Connect</button>
           </div>
+          <p class="hero-description">
+            A clean Fire TV remote with persistent device presets, full playback controls, and deliberate text send.
+          </p>
+        </div>
       </header>
-      
-      <div class="device-controls-expanded" id="deviceControlsExpanded" style="display: none;">
-        <div class="device-config">
-          <select id="deviceSelectExpanded"></select>
-          <div class="manual-input">
-            <input type="text" id="manualHostExpanded" placeholder="192.168.1.65:5555" />
-          </div>
-          <button id="connectBtnExpanded">Connect</button>
-        </div>
-      </div>
 
-      <main>
-        <section class="remote">
-          <div class="top-bar">
-            <button class="btn round sm" data-key="224" aria-label="Power">
-              <img class="icon" src="/icons/power.svg" alt="" />
-            </button>
-            <div id="indicator" aria-hidden="true"></div>
-          </div>
-
-          <div class="dpad">
-            <div class="dpad-ring">
-              <button class="dpad-quadrant up" data-key="19" aria-label="Up">
-                <img class="icon" src="/icons/arrow-up.svg" alt="" />
-              </button>
-              <button class="dpad-quadrant right" data-key="22" aria-label="Right">
-                <img class="icon" src="/icons/arrow-right.svg" alt="" />
-              </button>
-              <button class="dpad-quadrant down" data-key="20" aria-label="Down">
-                <img class="icon" src="/icons/arrow-down.svg" alt="" />
-              </button>
-              <button class="dpad-quadrant left" data-key="21" aria-label="Left">
-                <img class="icon" src="/icons/arrow-left.svg" alt="" />
+      <main class="app-shell">
+        <section class="control-column">
+          <section class="connection-card" aria-labelledby="connectionCardTitle">
+            <div class="manager-heading">
+              <div class="manager-heading-copy">
+                <h2 id="connectionCardTitle">Connect</h2>
+                <p>Use any Fire TV address directly, or open your saved device library when you need it.</p>
+              </div>
+              <span id="connectionStatus" class="connection-status" aria-live="polite">
+                Enter a Fire TV address to begin
+              </span>
+            </div>
+            <div class="connection-bar">
+              <label class="sr-only" for="hostInput">Fire TV address</label>
+              <input
+                id="hostInput"
+                type="text"
+                inputmode="url"
+                placeholder="10.194.20.230 or 10.194.20.230:5555"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="connectBtn" type="button">Connect</button>
+            </div>
+            <div class="connection-card-footer">
+              <p class="connection-card-note">
+                Saved devices persist locally on this app and can be loaded into the connection field anytime.
+              </p>
+              <button
+                id="openDeviceManagerBtn"
+                class="btn secondary"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >
+                Saved Devices
               </button>
             </div>
-            <button class="btn select" data-key="23" aria-label="OK">
-            </button>
-          </div>
+          </section>
 
-          <div class="row nav-row">
-            <button class="btn round md" data-key="4" aria-label="Back">
-              <img class="icon" src="/icons/back.svg" alt="" />
-            </button>
-            <button class="btn round md" data-key="3" aria-label="Home">
-              <img class="icon" src="/icons/home.svg" alt="" />
-            </button>
-            <button class="btn round md" data-key="82" aria-label="Menu">
-              <img class="icon" src="/icons/menu.svg" alt="" />
-            </button>
-          </div>
-
-          <div class="app-section">
-            <h2 class="app-section-title">Apps</h2>
-            <div class="app-grid">
-              <button class="app-btn" data-app="prime" aria-label="Amazon Prime Video">
-                <img src="/icons/Amazon_Prime_Video.svg" alt="Prime Video" class="app-logo" />
-              </button>
-              <button class="app-btn" data-app="netflix" aria-label="Netflix">
-                <img src="/icons/Netflix.svg" alt="Netflix" class="app-logo" />
-              </button>
-              <button class="app-btn" data-app="youtube" aria-label="YouTube TV">
-                <img src="/icons/YouTube_TV.svg" alt="YouTube TV" class="app-logo" />
-              </button>
-              <button class="app-btn" data-app="hulu" aria-label="Hulu">
-                <img src="/icons/Hulu.svg" alt="Hulu" class="app-logo" />
-              </button>
+          <section class="text-section" aria-labelledby="textSectionTitle">
+            <div class="text-section-header">
+              <h2 class="text-section-title" id="textSectionTitle">Send Text</h2>
+              <p class="text-section-copy">
+                Type freely here. Nothing is sent until you tap <strong>Send Text</strong>. Use
+                <strong>Backspace</strong> to fire the Fire TV rewind key as a delete shortcut.
+              </p>
             </div>
-          </div>
+            <label class="sr-only" for="textInput">Text to send</label>
+            <textarea
+              id="textInput"
+              class="text-input"
+              rows="4"
+              placeholder="Paste a URL, search term, or message"
+              spellcheck="false"
+            ></textarea>
+            <div class="text-toolbar">
+              <div class="text-meta">
+                <span id="textCharCount">0 characters</span>
+                <span id="textStatus" class="text-status" aria-live="polite">Ready to send</span>
+              </div>
+              <div class="text-actions">
+                <button id="backspaceTextBtn" class="btn secondary" type="button">Backspace</button>
+                <button id="clearTextBtn" class="btn secondary" type="button">Clear</button>
+                <button id="sendTextBtn" class="btn send-text-btn" type="button">Send Text</button>
+              </div>
+            </div>
+          </section>
+        </section>
 
+        <section class="remote-stage">
+          <section class="remote-panel" aria-labelledby="remotePanelTitle">
+            <div class="remote-panel-header">
+              <div>
+                <span class="panel-kicker">Full Remote</span>
+                <h2 id="remotePanelTitle">Fire TV Control Surface</h2>
+              </div>
+              <div class="live-indicator">
+                <div id="indicator" aria-hidden="true"></div>
+                <span>Live commands</span>
+              </div>
+            </div>
+
+            <div class="remote-body">
+              <div class="system-row">
+                <button class="remote-chip danger" data-key="26" aria-label="Power">
+                  <img class="icon" src="/icons/power.svg" alt="" />
+                  <span>Power</span>
+                </button>
+                <button class="remote-chip" data-key="3" aria-label="Home">
+                  <img class="icon" src="/icons/home.svg" alt="" />
+                  <span>Home</span>
+                </button>
+                <button class="remote-chip" data-key="82" aria-label="Menu">
+                  <img class="icon" src="/icons/menu.svg" alt="" />
+                  <span>Menu</span>
+                </button>
+              </div>
+
+              <div class="remote-center">
+                <div class="transport-column">
+                  <button class="remote-pill" data-key="89" aria-label="Rewind">
+                    <img class="icon" src="/icons/rewind.svg" alt="" />
+                    <span>Rewind</span>
+                  </button>
+                  <button class="remote-pill" data-key="85" aria-label="Play or Pause">
+                    <img class="icon" src="/icons/play-pause.svg" alt="" />
+                    <span>Play/Pause</span>
+                  </button>
+                  <button class="remote-pill" data-key="90" aria-label="Fast Forward">
+                    <img class="icon" src="/icons/fast-forward.svg" alt="" />
+                    <span>Forward</span>
+                  </button>
+                </div>
+
+                <div class="dpad-shell">
+                  <div class="dpad">
+                    <div class="dpad-grid">
+                      <span class="dpad-spacer" aria-hidden="true"></span>
+                      <button class="dpad-button up" data-key="19" aria-label="Up">
+                        <img class="icon" src="/icons/arrow-up.svg" alt="" />
+                      </button>
+                      <span class="dpad-spacer" aria-hidden="true"></span>
+
+                      <button class="dpad-button left" data-key="21" aria-label="Left">
+                        <img class="icon" src="/icons/arrow-left.svg" alt="" />
+                      </button>
+                      <button class="btn select" data-key="23" aria-label="Select">
+                        <img class="icon select-icon" src="/icons/select.svg" alt="" />
+                        <span>Select</span>
+                      </button>
+                      <button class="dpad-button right" data-key="22" aria-label="Right">
+                        <img class="icon" src="/icons/arrow-right.svg" alt="" />
+                      </button>
+
+                      <span class="dpad-spacer" aria-hidden="true"></span>
+                      <button class="dpad-button down" data-key="20" aria-label="Down">
+                        <img class="icon" src="/icons/arrow-down.svg" alt="" />
+                      </button>
+                      <span class="dpad-spacer" aria-hidden="true"></span>
+                    </div>
+                  </div>
+                  <button class="remote-chip back-chip" data-key="4" aria-label="Back">
+                    <img class="icon" src="/icons/back.svg" alt="" />
+                    <span>Back</span>
+                  </button>
+                </div>
+
+                <div class="volume-column">
+                  <button class="remote-pill" data-key="24" aria-label="Volume Up">
+                    <img class="icon" src="/icons/volume-up.svg" alt="" />
+                    <span>Vol +</span>
+                  </button>
+                  <button class="remote-pill" data-key="164" aria-label="Mute">
+                    <img class="icon" src="/icons/mute.svg" alt="" />
+                    <span>Mute</span>
+                  </button>
+                  <button class="remote-pill" data-key="25" aria-label="Volume Down">
+                    <img class="icon" src="/icons/volume-down.svg" alt="" />
+                    <span>Vol -</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="app-section" aria-labelledby="quickLaunchTitle">
+            <div class="section-heading">
+              <div>
+                <span class="panel-kicker">Quick Launch</span>
+                <h2 id="quickLaunchTitle" class="app-section-title">Quick Launch</h2>
+              </div>
+              <div class="quick-launch-header-actions">
+                <p>Choose your favorite installed apps and launch them instantly.</p>
+                <button id="editQuickLaunchBtn" class="btn secondary" type="button">Edit Quick Launch</button>
+              </div>
+            </div>
+            <div id="quickLaunchStatus" class="quick-launch-status" aria-live="polite">
+              Connect to your Fire TV to discover installed apps.
+            </div>
+            <div id="quickLaunchGrid" class="app-grid quick-launch-grid"></div>
+
+            <div id="quickLaunchEditPanel" class="quick-launch-editor" hidden>
+              <div class="quick-launch-editor-card">
+                <div class="quick-launch-editor-header">
+                  <div>
+                    <h3>All Installed Apps</h3>
+                    <p>Select which apps belong in Quick Launch.</p>
+                  </div>
+                  <button id="closeQuickLaunchEditorBtn" class="btn secondary" type="button">Done</button>
+                </div>
+                <label class="sr-only" for="appSearchInput">Search installed apps</label>
+                <input
+                  id="appSearchInput"
+                  class="app-search-input"
+                  type="text"
+                  placeholder="Search installed apps"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div id="allAppsGrid" class="app-grid all-apps-grid"></div>
+              </div>
+            </div>
+          </section>
         </section>
       </main>
+
+      <div id="deviceModal" class="modal" hidden>
+        <div class="modal-backdrop" data-close-modal="true"></div>
+        <section class="modal-panel device-manager" aria-labelledby="deviceManagerTitle" aria-modal="true" role="dialog">
+          <div class="modal-header">
+            <div class="manager-heading-copy">
+              <h2 id="deviceManagerTitle">Saved Devices</h2>
+              <p>Save, edit, and load named Fire TV presets without cluttering the main remote screen.</p>
+            </div>
+            <button id="closeDeviceModalBtn" class="btn secondary modal-close" type="button" aria-label="Close saved devices">
+              Close
+            </button>
+          </div>
+
+          <div class="manager-grid">
+            <form id="deviceForm" class="manager-form-card">
+              <div class="manager-card-head">
+                <h3 id="deviceFormTitle">Add Device</h3>
+                <p>Store the address once, then load it whenever you need it.</p>
+              </div>
+
+              <label class="manager-label" for="deviceNameInput">
+                Device name
+                <input
+                  id="deviceNameInput"
+                  type="text"
+                  maxlength="40"
+                  placeholder="Living Room Fire TV"
+                  autocomplete="off"
+                />
+              </label>
+
+              <label class="manager-label" for="deviceHostInput">
+                IP address or IP:PORT
+                <input
+                  id="deviceHostInput"
+                  type="text"
+                  inputmode="url"
+                  placeholder="10.194.20.230"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+
+              <div class="manager-form-actions">
+                <button id="saveDeviceBtn" class="btn manager-primary" type="submit">Save Device</button>
+                <button id="cancelEditBtn" class="btn secondary" type="button" hidden>Cancel</button>
+              </div>
+            </form>
+
+            <section class="saved-devices-card" aria-labelledby="savedDevicesTitle">
+              <div class="manager-card-head saved-devices-toolbar">
+                <div>
+                  <h3 id="savedDevicesTitle">Device Library</h3>
+                  <p>Load a saved address instantly, then connect when you’re ready.</p>
+                </div>
+                <span id="savedDevicesCount" class="saved-count">0 saved</span>
+              </div>
+              <div id="savedDevicesList" class="saved-devices-list"></div>
+            </section>
+          </div>
+        </section>
+      </div>
     </div>
 
     <script src="/main.js"></script>

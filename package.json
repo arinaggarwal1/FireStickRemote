@@ -1,11 +1,15 @@
 {
   "name": "firetv-remote-web",
+  "productName": "Fire TV Remote",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "NODE_ENV=development node server/index.js",
     "start": "NODE_ENV=production node server/index.js",
+    "desktop": "electron .",
+    "desktop:package": "rm -rf dist && electron-builder --mac dmg",
     "postinstall": "mkdir -p data public && cp -n sample.env .env 2>/dev/null || true"
   },
   "dependencies": {
@@ -13,5 +17,32 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.local.firetvremote",
+    "productName": "Fire TV Remote",
+    "asar": false,
+    "directories": {
+      "buildResources": "electron",
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "public/**/*",
+      "server/**/*",
+      "package.json",
+      "config.yml"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "electron/icon.icns"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
   }
 }

@@ -37,7 +37,9 @@ tmp/
 temp/
 *.tmp
 
+# App runtime data
+data/devices.json
+
 # Optional: Ignore config.yml if it contains sensitive device info
 # Uncomment the line below if you want to keep your device configs private
 # config.yml
-
