@@ -1,352 +1,346 @@
-# Fire TV Remote (Web)
+# Fire TV Remote
 
-A modern web application that mimics an Amazon Fire TV remote and sends commands via ADB from your server. Features a responsive design with directional pad, app launcher buttons, and comprehensive device management.
+A desktop-first Fire TV remote built with Electron, Express, and ADB.
 
-## Prerequisites
+It gives you:
+- a full Fire TV remote layout with D-pad, playback, volume, power, home, menu, and back
+- explicit text send with a compose box and a dedicated `Send Text` button
+- a persistent saved-device manager with named Fire TV targets
+- a dynamic Quick Launch grid built from the apps actually installed on your Fire TV, including sideloaded apps
+- a packaged macOS app + DMG build flow
 
+## What It Is
+
+The app runs in an Electron window, not just a browser tab.
+
+Inside the desktop app:
+- Electron starts a private local Express server
+- the frontend talks to that server over localhost
+- the server runs `adb` commands against your Fire TV
+
+The same Express server can still be run by itself for local development or server-style deployment, but the primary workflow is now the desktop app.
+
+## Requirements
+
+- macOS
 - Node.js 18+
-- ADB installed on the server and in PATH
-  - Optionally set `ADB_PATH` if `adb` is not in PATH
-- Fire TV with ADB debugging enabled
-  - Settings -> My Fire TV -> Developer options -> ADB debugging: ON
-  - Note the device IP. Default ADB TCP port is 5555.
+- ADB installed
 
-## Quick Setup
+The app tries several common ADB locations automatically, including:
+- `/opt/homebrew/bin/adb`
+- `/usr/local/bin/adb`
+- Android SDK `platform-tools`
+
+You can also force a specific binary with:
 
 ```bash
-cd "/home/username/FireTV Remote"
+ADB_PATH=/absolute/path/to/adb
+```
+
+## Fire TV Setup
+
+On the Fire TV:
+
+1. Open `Settings -> My Fire TV -> Developer options`
+2. Turn on `ADB debugging`
+3. Make sure you know the device IP address
+4. Default ADB TCP port is `5555`
+
+## Install
+
+```bash
 npm install
-npm run start
-# or for development (same, just different NODE_ENV)
+```
+
+## Run
+
+### Desktop dev mode
+
+```bash
+npm run desktop
+```
+
+This launches the Electron desktop app directly.
+
+### Standalone server mode
+
+```bash
 npm run dev
 ```
 
-The server listens on http://localhost:9090 by default.
-
-## Device Configuration
-
-### Multiple Device Profiles
-
-The application supports multiple Fire TV devices through a configuration file (`config.yml`):
-
-```yaml
-devices:
-  - name: "Living Room Fire TV"
-    host: "192.168.1.65"
-    port: 5555
-    default: true
-  - name: "Bedroom Fire TV"
-    host: "192.168.1.66"
-    port: 5555
-    default: false
-```
-
-### Environment Variables
-
-You can persist default settings via environment variables:
+or
 
 ```bash
-FIRETV_HOST=192.168.1.65:5555
-PORT=9090
-NODE_ENV=production
+npm run start
 ```
 
-### Connection Process
+By default the standalone server listens on:
 
-1. **Select Device**: Choose from configured devices in the dropdown
-2. **Manual Entry**: Select "Manual" to enter any IP:PORT directly
-3. **Connect**: Click "Connect" to establish ADB connection
-4. **Pairing**: On first connection, accept the ADB pairing prompt on your Fire TV
-5. **Status**: Connection status is indicated by the colored indicator:
-   - 🔴 Red: Disconnected
-   - 🟡 Yellow: Connecting
-   - 🟢 Green: Connected
+```text
+http://localhost:9090
+```
 
-### Manual IP:PORT Entry
+## Package a macOS App
 
-For quick connections to any Fire TV device without configuration:
-
-1. **Select "Manual"** from the device dropdown
-2. **Controls expand** to their own line below the header
-3. **Enter IP:PORT** (e.g., `192.168.1.100:5555`)
-4. **Click Connect** to establish connection
-
-**Layout Behavior:**
-
-- **Manual Mode**: Device controls move to dedicated line with dropdown, input field, and connect button
-- **Profile Mode**: Controls return to compact header layout
-- **Seamless Switching**: Layout adapts automatically based on selection
-
-## API Endpoints
-
-- `POST /api/connect` → `adb connect <host>`
-- `POST /api/disconnect` → `adb disconnect`
-- `POST /api/pair { host, code }` → `adb pair <host> <code>`
-- `POST /api/key { code }` → `adb shell input keyevent <code>`
-- `POST /api/text { text }` → `adb shell input text <encoded>` (space → %s)
-- `POST /api/swipe { x1,y1,x2,y2,durationMs }` → touch swipe
-- `POST /api/app { app, package }` → `adb shell monkey -p <package> -c <category> 1`
-
-### Common Key Codes
-
-- **Navigation**: Dpad Up 19, Down 20, Left 21, Right 22, Center/OK 23
-- **System**: Back 4, Home 3, Power/Wake 224
-- **Media**: Play/Pause 85, Next 87, Previous/Rev 88/90 (varies)
-- **Volume**: Up 24, Down 25, Mute 164
-
-## App Launching
-
-### Pre-configured Apps
-
-The application includes buttons for popular streaming services:
-
-- **Amazon Prime Video**: `com.amazon.firebat` (uses LEANBACK_LAUNCHER)
-- **Netflix**: `com.netflix.ninja`
-- **YouTube TV**: `com.amazon.firetv.youtube.tv`
-- **Hulu**: `com.hulu.plus`
-
-### Finding App Package Names
-
-To add new apps or troubleshoot existing ones:
-
-1. **List all packages**:
-
-   ```bash
-   adb shell pm list packages
-   ```
-
-2. **Search for specific apps**:
-
-   ```bash
-   adb shell pm list packages | grep -i netflix
-   adb shell pm list packages | grep -i prime
-   adb shell pm list packages | grep -i youtube
-   ```
-
-3. **Find currently running app**:
-   ```bash
-   adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp'
-   ```
-
-### Testing App Launch Commands
-
-Test app launches manually before adding to the application:
+To build a fresh drag-to-Applications DMG:
 
 ```bash
-# Standard apps (most third-party apps)
-adb shell monkey -p com.netflix.ninja -c android.intent.category.LAUNCHER 1
-
-# Fire TV native apps (may require LEANBACK_LAUNCHER)
-adb shell monkey -p com.amazon.firebat -c android.intent.category.LEANBACK_LAUNCHER 1
+npm run desktop:package
 ```
 
-### Troubleshooting App Launches
+This command:
+- deletes the previous `dist/` output first
+- builds a real macOS `.app`
+- creates a DMG you can distribute or install locally
 
-- **App doesn't launch**: Check if package name is correct
-- **Wrong launcher category**: Try `LEANBACK_LAUNCHER` instead of `LAUNCHER`
-- **Permission denied**: Ensure ADB debugging is enabled
-- **App not found**: Verify the app is installed on the Fire TV
+Output files:
+- [`dist/Fire TV Remote-1.0.0-arm64.dmg`](/Users/arinaggarwal/Documents/Software Dev/FireStickRemote/dist/Fire TV Remote-1.0.0-arm64.dmg)
+- [`dist/mac-arm64/Fire TV Remote.app`](/Users/arinaggarwal/Documents/Software Dev/FireStickRemote/dist/mac-arm64/Fire TV Remote.app)
 
-## Systemd Service Setup
+Note:
+- the packaged app is currently unsigned
+- macOS may require `Right click -> Open` the first time you launch it
 
-### Install as System Service
+## Persistence
 
-1. **Copy service file**:
+The app keeps user data outside the packaged app bundle.
 
-   ```bash
-   sudo cp "firetv-remote.service" /etc/systemd/system/
-   sudo systemctl daemon-reload
-   ```
+### Desktop app data
 
-2. **Enable and start**:
+When running through Electron, app data is stored under:
 
-   ```bash
-   sudo systemctl enable firetv-remote
-   sudo systemctl start firetv-remote
-   ```
+```text
+~/Library/Application Support/Fire TV Remote
+```
 
-3. **Verify status**:
-   ```bash
-   sudo systemctl status firetv-remote
-   ```
+That means your data survives:
+- rebuilding the DMG
+- reinstalling the app
+- dragging a new `.app` into Applications
 
-### Service Management Commands
+### Saved devices
+
+Saved devices are persisted in:
+
+```text
+devices.json
+```
+
+In Electron, that file lives under the Application Support folder above.
+
+### Quick Launch selections
+
+Quick Launch selections are stored in the app’s browser storage inside the Electron user-data directory, so they also survive rebuilds and reinstallations.
+
+### Legacy config seeding
+
+If a legacy [`config.yml`](/Users/arinaggarwal/Documents/Software Dev/FireStickRemote/config.yml) exists, the server can use it as a one-time seed source for saved devices. Ongoing edits happen in persisted app data, not in `config.yml`.
+
+## Main Features
+
+### Saved device manager
+
+The app uses a popup saved-device manager instead of always showing device configuration on the main screen.
+
+You can:
+- add a Fire TV by name
+- edit saved devices
+- delete saved devices
+- load a device into the connection field
+- connect directly from the saved-device modal
+
+### Full remote controls
+
+The remote includes:
+- Power `26`
+- Home `3`
+- Back `4`
+- Menu `82`
+- D-pad Up `19`
+- D-pad Down `20`
+- D-pad Left `21`
+- D-pad Right `22`
+- Select `23`
+- Play/Pause `85`
+- Rewind `89`
+- Forward `90`
+- Volume Up `24`
+- Volume Down `25`
+- Mute `164`
+
+### Text sending
+
+Text is only sent when you press `Send Text`.
+
+The backend sends:
 
 ```bash
-# Start/Stop/Restart
-sudo systemctl start firetv-remote
-sudo systemctl stop firetv-remote
-sudo systemctl restart firetv-remote
-
-# Check status and logs
-sudo systemctl status firetv-remote
-sudo journalctl -u firetv-remote -f
-
-# Disable auto-start
-sudo systemctl disable firetv-remote
+adb -s HOST shell input text "YOUR_TEXT"
 ```
 
-### Service Configuration
+Spaces are encoded for ADB, and newlines are normalized to spaces.
 
-The service file (`firetv-remote.service`) includes:
+The text panel also includes a `Backspace` button. On Fire TV that is mapped to the rewind key code:
 
-- Auto-restart on failure
-- Runs as your user (not root)
-- Waits for network before starting
-- Logs to systemd journal
-- Production environment settings
-
-## ADB Troubleshooting
-
-### Connection Issues
-
-1. **Verify Fire TV ADB is enabled**:
-
-   - Settings → My Fire TV → Developer options → ADB debugging: ON
-
-2. **Check network connectivity**:
-
-   ```bash
-   ping 192.168.1.65
-   telnet 192.168.1.65 5555
-   ```
-
-3. **List connected devices**:
-
-   ```bash
-   adb devices
-   ```
-
-4. **Manual connection test**:
-   ```bash
-   adb connect 192.168.1.65:5555
-   adb shell echo "test"
-   ```
-
-### Common ADB Issues
-
-- **"device unauthorized"**: Accept pairing prompt on Fire TV
-- **"connection refused"**: Check if ADB debugging is enabled
-- **"no devices found"**: Verify IP address and port
-- **"command not found"**: Ensure ADB is installed and in PATH
-
-### Fire TV Specific Issues
-
-- **Apps from Unknown Sources**: Some Fire TVs require this setting enabled once
-- **Developer Options**: May need to be enabled multiple times
-- **Network Restrictions**: Ensure Fire TV and server are on same network
-- **Firewall**: Check if port 5555 is blocked
-
-## Security Considerations
-
-- **Network Security**: This app executes ADB commands server-side. Host only on trusted networks/VPN
-- **Access Control**: Consider binding to a private interface or behind auth/reverse proxy if exposed
-- **ADB Security**: ADB connections are not encrypted by default
-- **Firewall**: Restrict access to port 9090 (web interface) and 5555 (ADB)
-
-## Deployment Options
-
-### Home Server with VPN
-
-1. **Run on home server** with static local IP
-2. **Expose via VPN** so your phone can access the web UI
-3. **Ensure connectivity** between server and Fire TV on port 5555
-
-### Docker Deployment
-
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install --production
-COPY . .
-EXPOSE 9090
-CMD ["npm", "start"]
+```text
+89
 ```
 
-### Reverse Proxy (Nginx)
+### Dynamic Quick Launch
 
-```nginx
-server {
-    listen 80;
-    server_name firetv.yourdomain.com;
+Quick Launch is package-driven and user-configurable.
 
-    location / {
-        proxy_pass http://localhost:9090;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+The app:
+1. queries installed packages from the Fire TV
+2. renders a launcher grid dynamically
+3. lets you pick which installed apps should be pinned
+4. persists those pinned selections locally
+
+The edit panel includes:
+- installed-app discovery
+- search
+- selected/unselected states
+- immediate add/remove feedback
+
+The backend does not depend on hardcoded app IDs. Launching works off package names.
+
+## Installed App Discovery
+
+The backend route is:
+
+```text
+GET /api/apps?host=HOST
+```
+
+It tries multiple discovery paths and returns:
+
+```json
+{
+  "packages": ["com.netflix.ninja", "org.xbmc.kodi"]
 }
 ```
 
-## Development
+This allows Quick Launch to include:
+- Appstore apps
+- sideloaded apps
+- launcher-visible apps discovered from the connected Fire TV
 
-### Project Structure
+## App Launching
 
-```
-FireTV Remote/
-├── public/           # Frontend files
-│   ├── index.html   # Main HTML
-│   ├── styles.css   # Styling
-│   ├── main.js      # Frontend JavaScript
-│   └── icons/       # App logos and icons
-├── server/          # Backend files
-│   └── index.js     # Express server
-├── config.yml       # Device configuration
-└── package.json     # Dependencies
+The launch endpoint is:
+
+```text
+POST /api/app
 ```
 
-### Adding New Apps
+Payload:
 
-1. **Find package name** using ADB commands above
-2. **Test launch command** manually
-3. **Add to frontend** (`public/main.js`):
-   ```javascript
-   const APP_PACKAGES = {
-     // ... existing apps
-     newapp: "com.newapp.package",
-   };
-   ```
-4. **Add button** to HTML and style as needed
-5. **Update backend** if special launcher category needed
+```json
+{
+  "package": "com.netflix.ninja",
+  "host": "10.194.20.230:5555"
+}
+```
 
-### Customization
+Launches use:
 
-- **Styling**: Modify `public/styles.css` for visual changes
-- **Key mappings**: Update key codes in `public/main.js`
-- **Device config**: Edit `config.yml` for multiple devices
-- **Server settings**: Modify `server/index.js` for API changes
+```bash
+adb -s HOST shell monkey -p PACKAGE -c CATEGORY 1
+```
+
+Special handling remains in place for packages that need:
+
+```text
+android.intent.category.LEANBACK_LAUNCHER
+```
+
+Prime Video is the main built-in special case.
+
+## API
+
+Current backend routes:
+
+- `GET /api/devices`
+- `POST /api/devices`
+- `PUT /api/devices/:id`
+- `DELETE /api/devices/:id`
+- `GET /api/apps?host=HOST`
+- `POST /api/connect`
+- `POST /api/disconnect`
+- `POST /api/pair`
+- `POST /api/key`
+- `POST /api/text`
+- `POST /api/swipe`
+- `POST /api/app`
+
+## Project Structure
+
+```text
+FireStickRemote/
+├── electron/
+│   ├── icon.icns
+│   ├── main.js
+│   └── open-built-app.js
+├── public/
+│   ├── favicon_io/
+│   ├── icons/
+│   ├── index.html
+│   ├── main.js
+│   └── styles.css
+├── server/
+│   └── index.js
+├── config.yml
+├── firetv-remote.service
+└── package.json
+```
+
+## Development Notes
+
+- The frontend is plain HTML/CSS/JS with no bundler.
+- The desktop shell is Electron.
+- The backend is a small Express server that wraps ADB subprocesses.
+- Static assets are served with no-cache headers so the desktop shell pulls fresh frontend code after changes.
+- The packaged app uses a custom rounded icon and proper app metadata (`Fire TV Remote`) instead of showing the stock Electron app name.
 
 ## Troubleshooting
 
-### General Issues
+### `spawn adb ENOENT`
 
-- **Server won't start**: Check if port 9090 is available
-- **ADB not found**: Install Android SDK platform-tools or set `ADB_PATH`
-- **Permission denied**: Ensure user has access to ADB and project directory
-- **Service won't start**: Check systemd logs with `journalctl -u firetv-remote`
+This usually means the packaged app cannot see your shell PATH.
 
-### Fire TV Specific
+The app now checks common ADB locations automatically, but if needed you can still force it:
 
-- **Connection drops**: Fire TV may sleep; wake it up and reconnect
-- **Apps not launching**: Verify package names and launcher categories
-- **Input not working**: Check if Fire TV is responsive to physical remote
-- **Network issues**: Ensure both devices are on same subnet
+```bash
+ADB_PATH=/opt/homebrew/bin/adb npm run desktop
+```
 
-### Performance
+### Quick Launch shows no apps
 
-- **Slow response**: Check network latency between server and Fire TV
-- **High CPU**: Monitor ADB process usage
-- **Memory leaks**: Restart service periodically if needed
+Check:
 
-## Contributing
+1. the Fire TV is connected over ADB
+2. the app is connected to the correct `IP:PORT`
+3. ADB debugging is enabled on the Fire TV
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly with your Fire TV
-5. Submit a pull request
+You can verify from the terminal:
 
-## License
+```bash
+adb devices -l
+adb -s 10.194.20.230:5555 shell pm list packages -3
+```
 
-This project is open source. Please ensure compliance with Amazon's terms of service when using with Fire TV devices.
+### Packaged app opens but macOS warns about it
+
+The app is not code-signed right now. On first launch:
+
+1. Right click the app
+2. Click `Open`
+3. Confirm the prompt
+
+### Rebuilding the DMG
+
+`npm run desktop:package` removes the previous `dist/` folder first, so rebuilding replaces the old package output instead of accumulating stale DMGs.
+
+## Optional System Service
+
+The repo still includes [`firetv-remote.service`](/Users/arinaggarwal/Documents/Software Dev/FireStickRemote/firetv-remote.service) if you want to run the standalone Express server as a systemd service on a Linux box, but that is separate from the Electron desktop app workflow.
