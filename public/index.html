@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="/favicon_io/site.webmanifest">
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260402-ui2" />
   </head>
   <body>
     <div id="app">
@@ -24,13 +24,9 @@
           <div class="header-brand">
             <img src="/favicon_io/remote_icon.png" alt="Remote" class="header-icon" />
             <div class="brand-copy">
-              <span class="brand-kicker">Fire TV Control Deck</span>
               <h1>Fire TV Remote</h1>
             </div>
           </div>
-          <p class="hero-description">
-            A clean Fire TV remote with persistent device presets, full playback controls, and deliberate text send.
-          </p>
         </div>
       </header>
 
@@ -40,12 +36,12 @@
             <div class="manager-heading">
               <div class="manager-heading-copy">
                 <h2 id="connectionCardTitle">Connect</h2>
-                <p>Use any Fire TV address directly, or open your saved device library when you need it.</p>
               </div>
               <span id="connectionStatus" class="connection-status" aria-live="polite">
                 Enter a Fire TV address to begin
               </span>
             </div>
+            <p id="connectionHint" class="capability-copy"></p>
             <div class="connection-bar">
               <label class="sr-only" for="hostInput">Fire TV address</label>
               <input
@@ -58,48 +54,115 @@
               />
               <button id="connectBtn" type="button">Connect</button>
             </div>
+            <section id="pairingPanel" class="pairing-panel" hidden aria-labelledby="pairingPanelTitle">
+              <div class="pairing-panel-header">
+                <div>
+                  <h3 id="pairingPanelTitle">Fire TV Pairing</h3>
+                  <p id="pairingHelpText">Show a PIN on the TV, then verify it here to unlock HTTPS control.</p>
+                </div>
+                <span id="pairingStatus" class="pairing-status" aria-live="polite">Pairing required</span>
+              </div>
+              <div class="pairing-panel-body">
+                <button id="pairingStartBtn" class="btn secondary" type="button">Show PIN on TV</button>
+                <label class="pairing-label" for="pairingPinInput">
+                  PIN
+                  <input
+                    id="pairingPinInput"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="8"
+                    placeholder="1234"
+                    autocomplete="one-time-code"
+                  />
+                </label>
+                <div class="pairing-actions">
+                  <button id="pairingCancelBtn" class="btn secondary" type="button">Dismiss</button>
+                  <button id="pairingVerifyBtn" class="btn" type="button">Verify PIN</button>
+                </div>
+              </div>
+            </section>
             <div class="connection-card-footer">
-              <p class="connection-card-note">
-                Saved devices persist locally on this app and can be loaded into the connection field anytime.
-              </p>
-              <button
-                id="openDeviceManagerBtn"
-                class="btn secondary"
-                type="button"
-                aria-haspopup="dialog"
-                aria-expanded="false"
-              >
-                Saved Devices
-              </button>
+              <div class="connection-card-actions">
+                <button id="repairAdbBtn" class="btn secondary" type="button">Repair ADB</button>
+                <button
+                  id="openDeviceManagerBtn"
+                  class="btn secondary"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                >
+                  Saved Devices
+                </button>
+              </div>
             </div>
           </section>
 
-          <section class="text-section" aria-labelledby="textSectionTitle">
-            <div class="text-section-header">
-              <h2 class="text-section-title" id="textSectionTitle">Send Text</h2>
-              <p class="text-section-copy">
-                Type freely here. Nothing is sent until you tap <strong>Send Text</strong>. Use
-                <strong>Backspace</strong> to fire the Fire TV rewind key as a delete shortcut.
-              </p>
+          <section class="utility-stack" aria-labelledby="utilitiesTitle">
+            <div class="stack-heading">
+              <div>
+                <h2 id="utilitiesTitle" class="stack-title">Utilities</h2>
+              </div>
             </div>
-            <label class="sr-only" for="textInput">Text to send</label>
-            <textarea
-              id="textInput"
-              class="text-input"
-              rows="4"
-              placeholder="Paste a URL, search term, or message"
-              spellcheck="false"
-            ></textarea>
-            <div class="text-toolbar">
-              <div class="text-meta">
-                <span id="textCharCount">0 characters</span>
-                <span id="textStatus" class="text-status" aria-live="polite">Ready to send</span>
-              </div>
-              <div class="text-actions">
-                <button id="backspaceTextBtn" class="btn secondary" type="button">Backspace</button>
-                <button id="clearTextBtn" class="btn secondary" type="button">Clear</button>
-                <button id="sendTextBtn" class="btn send-text-btn" type="button">Send Text</button>
-              </div>
+
+            <div class="utility-grid">
+              <section class="text-section utility-card" aria-labelledby="textSectionTitle">
+                <div class="text-section-header">
+                  <div>
+                    <h2 class="text-section-title" id="textSectionTitle">Send Text</h2>
+                  </div>
+                </div>
+                <label class="sr-only" for="textInput">Text to send</label>
+                <textarea
+                  id="textInput"
+                  class="text-input"
+                  rows="4"
+                  placeholder="Paste a URL, search term, or message"
+                  spellcheck="false"
+                ></textarea>
+                <p id="textCapabilityHint" class="capability-copy"></p>
+                <div class="text-toolbar">
+                  <div class="text-meta">
+                    <span id="textCharCount">0 characters</span>
+                    <span id="textStatus" class="text-status" aria-live="polite">Ready to send</span>
+                  </div>
+                  <div class="text-actions">
+                    <button id="backspaceTextBtn" class="btn secondary" type="button">Backspace</button>
+                    <button id="clearTextBtn" class="btn secondary" type="button">Clear</button>
+                    <button id="sendTextBtn" class="btn send-text-btn" type="button">Send Text</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="sideload-section utility-card" aria-labelledby="sideloadSectionTitle">
+                <div class="sideload-section-header">
+                  <div>
+                    <h2 class="text-section-title" id="sideloadSectionTitle">Sideload APK</h2>
+                  </div>
+                  <span id="sideloadStatus" class="sideload-status" aria-live="polite">
+                    Connect to a Fire TV and choose an APK to begin.
+                  </span>
+                </div>
+                <p id="sideloadCapabilityHint" class="capability-copy"></p>
+
+                <label class="sideload-picker" for="apkFileInput">
+                  <input id="apkFileInput" type="file" accept=".apk,application/vnd.android.package-archive" hidden />
+                  <span class="btn secondary pick-apk-btn">Choose APK</span>
+                  <span id="apkFileMeta" class="apk-file-meta">No APK selected</span>
+                </label>
+
+                <label class="sideload-toggle" for="replaceExistingCheckbox">
+                  <input id="replaceExistingCheckbox" type="checkbox" />
+                  <span>
+                    Replace existing app
+                    <small>Uses <code>adb install -r</code> for app updates.</small>
+                  </span>
+                </label>
+
+                <div class="sideload-actions">
+                  <button id="clearApkBtn" class="btn secondary" type="button">Clear APK</button>
+                  <button id="installApkBtn" class="btn send-text-btn" type="button">Install APK</button>
+                </div>
+              </section>
             </div>
           </section>
         </section>
@@ -108,7 +171,6 @@
           <section class="remote-panel" aria-labelledby="remotePanelTitle">
             <div class="remote-panel-header">
               <div>
-                <span class="panel-kicker">Full Remote</span>
                 <h2 id="remotePanelTitle">Fire TV Control Surface</h2>
               </div>
               <div class="live-indicator">
@@ -119,15 +181,15 @@
 
             <div class="remote-body">
               <div class="system-row">
-                <button class="remote-chip danger" data-key="26" aria-label="Power">
+                <button class="remote-chip danger" data-action="power" aria-label="Power">
                   <img class="icon" src="/icons/power.svg" alt="" />
                   <span>Power</span>
                 </button>
-                <button class="remote-chip" data-key="3" aria-label="Home">
+                <button class="remote-chip" data-action="home" aria-label="Home">
                   <img class="icon" src="/icons/home.svg" alt="" />
                   <span>Home</span>
                 </button>
-                <button class="remote-chip" data-key="82" aria-label="Menu">
+                <button class="remote-chip" data-action="menu" aria-label="Menu">
                   <img class="icon" src="/icons/menu.svg" alt="" />
                   <span>Menu</span>
                 </button>
@@ -135,15 +197,15 @@
 
               <div class="remote-center">
                 <div class="transport-column">
-                  <button class="remote-pill" data-key="89" aria-label="Rewind">
+                  <button class="remote-pill" data-action="rewind" aria-label="Rewind">
                     <img class="icon" src="/icons/rewind.svg" alt="" />
                     <span>Rewind</span>
                   </button>
-                  <button class="remote-pill" data-key="85" aria-label="Play or Pause">
+                  <button class="remote-pill" data-action="play_pause" aria-label="Play or Pause">
                     <img class="icon" src="/icons/play-pause.svg" alt="" />
                     <span>Play/Pause</span>
                   </button>
-                  <button class="remote-pill" data-key="90" aria-label="Fast Forward">
+                  <button class="remote-pill" data-action="fast_forward" aria-label="Fast Forward">
                     <img class="icon" src="/icons/fast-forward.svg" alt="" />
                     <span>Forward</span>
                   </button>
@@ -153,45 +215,45 @@
                   <div class="dpad">
                     <div class="dpad-grid">
                       <span class="dpad-spacer" aria-hidden="true"></span>
-                      <button class="dpad-button up" data-key="19" aria-label="Up">
+                      <button class="dpad-button up" data-action="dpad_up" aria-label="Up">
                         <img class="icon" src="/icons/arrow-up.svg" alt="" />
                       </button>
                       <span class="dpad-spacer" aria-hidden="true"></span>
 
-                      <button class="dpad-button left" data-key="21" aria-label="Left">
+                      <button class="dpad-button left" data-action="dpad_left" aria-label="Left">
                         <img class="icon" src="/icons/arrow-left.svg" alt="" />
                       </button>
-                      <button class="btn select" data-key="23" aria-label="Select">
+                      <button class="btn select" data-action="select" aria-label="Select">
                         <img class="icon select-icon" src="/icons/select.svg" alt="" />
                         <span>Select</span>
                       </button>
-                      <button class="dpad-button right" data-key="22" aria-label="Right">
+                      <button class="dpad-button right" data-action="dpad_right" aria-label="Right">
                         <img class="icon" src="/icons/arrow-right.svg" alt="" />
                       </button>
 
                       <span class="dpad-spacer" aria-hidden="true"></span>
-                      <button class="dpad-button down" data-key="20" aria-label="Down">
+                      <button class="dpad-button down" data-action="dpad_down" aria-label="Down">
                         <img class="icon" src="/icons/arrow-down.svg" alt="" />
                       </button>
                       <span class="dpad-spacer" aria-hidden="true"></span>
                     </div>
                   </div>
-                  <button class="remote-chip back-chip" data-key="4" aria-label="Back">
+                  <button class="remote-chip back-chip" data-action="back" aria-label="Back">
                     <img class="icon" src="/icons/back.svg" alt="" />
                     <span>Back</span>
                   </button>
                 </div>
 
                 <div class="volume-column">
-                  <button class="remote-pill" data-key="24" aria-label="Volume Up">
+                  <button class="remote-pill" data-action="volume_up" aria-label="Volume Up">
                     <img class="icon" src="/icons/volume-up.svg" alt="" />
                     <span>Vol +</span>
                   </button>
-                  <button class="remote-pill" data-key="164" aria-label="Mute">
+                  <button class="remote-pill" data-action="mute" aria-label="Mute">
                     <img class="icon" src="/icons/mute.svg" alt="" />
                     <span>Mute</span>
                   </button>
-                  <button class="remote-pill" data-key="25" aria-label="Volume Down">
+                  <button class="remote-pill" data-action="volume_down" aria-label="Volume Down">
                     <img class="icon" src="/icons/volume-down.svg" alt="" />
                     <span>Vol -</span>
                   </button>
@@ -203,17 +265,14 @@
           <section class="app-section" aria-labelledby="quickLaunchTitle">
             <div class="section-heading">
               <div>
-                <span class="panel-kicker">Quick Launch</span>
                 <h2 id="quickLaunchTitle" class="app-section-title">Quick Launch</h2>
               </div>
-              <div class="quick-launch-header-actions">
-                <p>Choose your favorite installed apps and launch them instantly.</p>
-                <button id="editQuickLaunchBtn" class="btn secondary" type="button">Edit Quick Launch</button>
-              </div>
+              <button id="editQuickLaunchBtn" class="btn secondary" type="button">Edit Quick Launch</button>
             </div>
             <div id="quickLaunchStatus" class="quick-launch-status" aria-live="polite">
               Connect to your Fire TV to discover installed apps.
             </div>
+            <p id="appsCapabilityHint" class="capability-copy"></p>
             <div id="quickLaunchGrid" class="app-grid quick-launch-grid"></div>
 
             <div id="quickLaunchEditPanel" class="quick-launch-editor" hidden>
@@ -221,7 +280,7 @@
                 <div class="quick-launch-editor-header">
                   <div>
                     <h3>All Installed Apps</h3>
-                    <p>Select which apps belong in Quick Launch.</p>
+                    <p>Select the apps that should stay pinned.</p>
                   </div>
                   <button id="closeQuickLaunchEditorBtn" class="btn secondary" type="button">Done</button>
                 </div>
@@ -247,7 +306,6 @@
           <div class="modal-header">
             <div class="manager-heading-copy">
               <h2 id="deviceManagerTitle">Saved Devices</h2>
-              <p>Save, edit, and load named Fire TV presets without cluttering the main remote screen.</p>
             </div>
             <button id="closeDeviceModalBtn" class="btn secondary modal-close" type="button" aria-label="Close saved devices">
               Close
@@ -258,7 +316,6 @@
             <form id="deviceForm" class="manager-form-card">
               <div class="manager-card-head">
                 <h3 id="deviceFormTitle">Add Device</h3>
-                <p>Store the address once, then load it whenever you need it.</p>
               </div>
 
               <label class="manager-label" for="deviceNameInput">
@@ -294,7 +351,6 @@
               <div class="manager-card-head saved-devices-toolbar">
                 <div>
                   <h3 id="savedDevicesTitle">Device Library</h3>
-                  <p>Load a saved address instantly, then connect when you’re ready.</p>
                 </div>
                 <span id="savedDevicesCount" class="saved-count">0 saved</span>
               </div>
@@ -305,6 +361,6 @@
       </div>
     </div>
 
-    <script src="/main.js"></script>
+    <script src="/main.js?v=20260402-ui2"></script>
   </body>
 </html>

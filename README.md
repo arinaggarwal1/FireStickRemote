@@ -1,13 +1,19 @@
 # Fire TV Remote
 
-A desktop-first Fire TV remote built with Electron, Express, and ADB.
+A desktop-first Fire TV remote built with Electron, Express, and a hybrid Fire TV transport layer.
 
 It gives you:
 - a full Fire TV remote layout with D-pad, playback, volume, power, home, menu, and back
+- HTTPS-first remote control with seamless ADB fallback where needed
 - explicit text send with a compose box and a dedicated `Send Text` button
+- HTTPS pairing with persisted client tokens for saved devices
 - a persistent saved-device manager with named Fire TV targets
 - a dynamic Quick Launch grid built from the apps actually installed on your Fire TV, including sideloaded apps
+- APK sideloading through ADB when remote-style features are already working over HTTPS
 - a packaged macOS app + DMG build flow
+
+Additional protocol documentation:
+- [`docs/FIRETV_HTTPS_PROTOCOL.md`](/Users/arinaggarwal/Documents/Software%20Dev/FireStickRemote/docs/FIRETV_HTTPS_PROTOCOL.md) for the reverse-engineered Fire TV HTTPS remote protocol, pairing flow, endpoint behavior, and transport quirks discovered during development
 
 ## What It Is
 
@@ -16,7 +22,8 @@ The app runs in an Electron window, not just a browser tab.
 Inside the desktop app:
 - Electron starts a private local Express server
 - the frontend talks to that server over localhost
-- the server runs `adb` commands against your Fire TV
+- the server prefers the Fire TV HTTPS remote API on port `8080`
+- the server keeps ADB available for sideloading, app-launch fallback, and unsupported operations
 
 The same Express server can still be run by itself for local development or server-style deployment, but the primary workflow is now the desktop app.
 
@@ -24,7 +31,8 @@ The same Express server can still be run by itself for local development or serv
 
 - macOS
 - Node.js 18+
-- ADB installed
+- A Fire TV reachable over HTTPS on port `8080`
+- ADB installed if you want sideloading or ADB fallback features
 
 The app tries several common ADB locations automatically, including:
 - `/opt/homebrew/bin/adb`
@@ -42,9 +50,9 @@ ADB_PATH=/absolute/path/to/adb
 On the Fire TV:
 
 1. Open `Settings -> My Fire TV -> Developer options`
-2. Turn on `ADB debugging`
-3. Make sure you know the device IP address
-4. Default ADB TCP port is `5555`
+2. Make sure you know the device IP address
+3. Turn on `ADB debugging` if you want sideloading or ADB fallback
+4. Be ready to pair the app the first time if no HTTPS client token has been saved yet
 
 ## Install
 
@@ -128,6 +136,12 @@ devices.json
 
 In Electron, that file lives under the Application Support folder above.
 
+Each saved device can now keep:
+- the user-facing host you entered
+- a derived ADB host
+- the Fire TV HTTPS client token
+- last-known capabilities and connection diagnostics
+
 ### Quick Launch selections
 
 Quick Launch selections are stored in the app’s browser storage inside the Electron user-data directory, so they also survive rebuilds and reinstallations.
@@ -152,33 +166,40 @@ You can:
 ### Full remote controls
 
 The remote includes:
-- Power `26`
-- Home `3`
-- Back `4`
-- Menu `82`
-- D-pad Up `19`
-- D-pad Down `20`
-- D-pad Left `21`
-- D-pad Right `22`
-- Select `23`
-- Play/Pause `85`
-- Rewind `89`
-- Forward `90`
-- Volume Up `24`
-- Volume Down `25`
-- Mute `164`
+- `power`
+- `home`
+- `back`
+- `menu`
+- `dpad_up`
+- `dpad_down`
+- `dpad_left`
+- `dpad_right`
+- `select`
+- `play_pause`
+- `rewind`
+- `fast_forward`
+- `volume_up`
+- `volume_down`
+- `mute`
+
+The frontend now speaks in semantic actions. The backend chooses the best transport automatically.
+
+### Pairing
+
+When HTTPS is reachable but no valid Fire TV client token is saved, the app shows a pairing panel instead of failing generically.
+
+Pairing flow:
+1. connect to the Fire TV by IP
+2. request a PIN on the TV with `POST /api/pair/display`
+3. enter the PIN in the pairing panel
+4. verify with `POST /api/pair/verify`
+5. keep the returned client token with the saved device when possible
 
 ### Text sending
 
 Text is only sent when you press `Send Text`.
 
-The backend sends:
-
-```bash
-adb -s HOST shell input text "YOUR_TEXT"
-```
-
-Spaces are encoded for ADB, and newlines are normalized to spaces.
+The backend prefers Fire TV HTTPS text input first, then falls back to ADB if HTTPS text is unavailable or the Fire TV keyboard is not active.
 
 The text panel also includes a `Backspace` button. On Fire TV that is mapped to the rewind key code:
 
@@ -204,6 +225,26 @@ The edit panel includes:
 
 The backend does not depend on hardcoded app IDs. Launching works off package names.
 
+## Hybrid Transport Behavior
+
+The backend uses a session/capability model instead of a single connected boolean.
+
+Connection checks include:
+- HTTPS reachability
+- TLS readiness
+- token presence and validity
+- pairing-required state
+- ADB availability
+- ADB connection state
+- per-feature capability and preferred transport
+
+Feature routing defaults:
+- remote controls: HTTPS first, ADB fallback
+- text input: HTTPS first, ADB fallback
+- app listing: HTTPS `appsV2` first, ADB fallback
+- app launch: ADB fallback path
+- APK sideloading: ADB only
+
 ## Installed App Discovery
 
 The backend route is:
@@ -216,7 +257,11 @@ It tries multiple discovery paths and returns:
 
 ```json
 {
-  "packages": ["com.netflix.ninja", "org.xbmc.kodi"]
+  "ok": true,
+  "apps": [
+    { "id": "com.netflix.ninja", "name": "Netflix", "sourceTransport": "https" }
+  ],
+  "packages": ["com.netflix.ninja"]
 }
 ```
 
@@ -264,14 +309,28 @@ Current backend routes:
 - `POST /api/devices`
 - `PUT /api/devices/:id`
 - `DELETE /api/devices/:id`
+- `GET /api/session?host=HOST`
 - `GET /api/apps?host=HOST`
 - `POST /api/connect`
 - `POST /api/disconnect`
+- `POST /api/pair/start`
+- `POST /api/pair/display`
+- `POST /api/pair/verify`
 - `POST /api/pair`
+- `POST /api/remote`
 - `POST /api/key`
 - `POST /api/text`
 - `POST /api/swipe`
 - `POST /api/app`
+- `POST /api/sideload`
+- `POST /api/adb/repair`
+
+Canonical action responses include:
+- `ok`
+- `device`
+- `session`
+- `result`
+- `error` for failures
 
 ## Project Structure
 
@@ -288,7 +347,12 @@ FireStickRemote/
 │   ├── main.js
 │   └── styles.css
 ├── server/
-│   └── index.js
+│   ├── index.js
+│   ├── models/
+│   ├── sessions/
+│   ├── tests/
+│   ├── transports/
+│   └── utils/
 ├── config.yml
 ├── firetv-remote.service
 └── package.json
@@ -298,9 +362,10 @@ FireStickRemote/
 
 - The frontend is plain HTML/CSS/JS with no bundler.
 - The desktop shell is Electron.
-- The backend is a small Express server that wraps ADB subprocesses.
+- The backend is an Express server with a hybrid HTTPS-first transport layer plus ADB fallback.
 - Static assets are served with no-cache headers so the desktop shell pulls fresh frontend code after changes.
 - The packaged app uses a custom rounded icon and proper app metadata (`Fire TV Remote`) instead of showing the stock Electron app name.
+- `npm test` runs unit coverage for host normalization, action mapping, capability derivation, devices-store migration, and hybrid transport selection.
 
 ## Troubleshooting
 
@@ -318,9 +383,9 @@ ADB_PATH=/opt/homebrew/bin/adb npm run desktop
 
 Check:
 
-1. the Fire TV is connected over ADB
-2. the app is connected to the correct `IP:PORT`
-3. ADB debugging is enabled on the Fire TV
+1. the app is connected to the correct Fire TV IP
+2. pairing has completed if HTTPS app listing requires auth
+3. ADB debugging is enabled if HTTPS app listing is unavailable and fallback is needed
 
 You can verify from the terminal:
 
@@ -328,6 +393,13 @@ You can verify from the terminal:
 adb devices -l
 adb -s 10.194.20.230:5555 shell pm list packages -3
 ```
+
+### Pairing is required every time
+
+Check:
+1. you are connecting to the same saved device entry
+2. `devices.json` is writable in the app data directory
+3. the Fire TV has not invalidated the previous client token
 
 ### Packaged app opens but macOS warns about it
 

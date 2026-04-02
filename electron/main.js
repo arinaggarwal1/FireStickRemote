@@ -24,6 +24,19 @@ let mainWindow = null;
 let serverProcess = null;
 let shuttingDown = false;
 
+app.commandLine.appendSwitch("disable-http-cache");
+
+function logServerChunk(streamName, chunk) {
+  const output = chunk.toString();
+  if (!output.trim()) return;
+
+  const lines = output.split(/\r?\n/).filter(Boolean);
+  for (const line of lines) {
+    const writer = streamName === "stderr" ? console.error : console.log;
+    writer(`[firetv-server:${streamName}] ${line}`);
+  }
+}
+
 app.setName(APP_DISPLAY_NAME);
 app.setPath("userData", path.join(app.getPath("appData"), APP_DISPLAY_NAME));
 
@@ -91,6 +104,8 @@ function startLocalServer() {
   });
 
   serverProcess = child;
+  child.stdout?.on("data", (chunk) => logServerChunk("stdout", chunk));
+  child.stderr?.on("data", (chunk) => logServerChunk("stderr", chunk));
   return waitForServerUrl(child);
 }
 
@@ -114,6 +129,7 @@ async function createMainWindow() {
   });
 
   mainWindow.removeMenu();
+  await mainWindow.webContents.session.clearCache();
   await mainWindow.loadURL(serverUrl);
 
   mainWindow.on("closed", () => {

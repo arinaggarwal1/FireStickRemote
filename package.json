@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "NODE_ENV=development node server/index.js",
     "start": "NODE_ENV=production node server/index.js",
+    "test": "node --test",
     "desktop": "electron .",
     "desktop:package": "rm -rf dist && electron-builder --mac dmg",
     "postinstall": "mkdir -p data public && cp -n sample.env .env 2>/dev/null || true"
@@ -16,7 +17,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "multer": "^1.4.5-lts.2"
   },
   "devDependencies": {
     "electron": "^37.2.6",
