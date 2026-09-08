@@ -333,7 +333,29 @@ export class DeviceSessionManager {
   }
 
   async shutdown() {
-    await this.adbTransport.closeAllShellSessions();
-    this.sessions.clear();
+    const shellSessionsKilled = this.adbTransport.getShellSessionCount?.() || 0;
+    let disconnectResult = null;
+
+    try {
+      disconnectResult = await this.adbTransport.disconnect();
+    } catch (error) {
+      this.logger.warn?.("ADB disconnect during shutdown failed.", {
+        code: error?.code || null,
+        message: error?.message || String(error),
+      });
+    } finally {
+      this.sessions.clear();
+    }
+
+    this.logger.info?.("Device session manager shutdown complete.", {
+      shellSessionsKilled,
+      adbDisconnectOk: Boolean(disconnectResult?.ok),
+    });
+
+    return {
+      shellSessionsKilled,
+      adbDisconnectOk: Boolean(disconnectResult?.ok),
+      disconnectResult,
+    };
   }
 }

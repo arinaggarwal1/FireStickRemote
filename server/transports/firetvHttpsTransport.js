@@ -38,17 +38,14 @@ function createEndpointError(code, defaultMessage, response, endpointPath, extra
 }
 
 function buildUnauthorizedState(bodyText, hasToken) {
-  const lower = String(bodyText || "").toLowerCase();
-  const missingToken = lower.includes("missing client token");
-  const invalidToken = lower.includes("invalid") || lower.includes("expired");
 
   return {
     httpsReachable: true,
     tlsReady: true,
     apiKeyAccepted: true,
-    pairingRequired: missingToken || !hasToken,
+    pairingRequired: true,
     tokenPresent: hasToken,
-    tokenValid: hasToken ? !invalidToken && !missingToken : false,
+    tokenValid: false,
     authenticated: false,
   };
 }
@@ -96,6 +93,39 @@ function normalizeAppsResponse(data) {
 
   const found = appArrays.find(Array.isArray);
   return found ? normalizeAppsResponse(found) : [];
+}
+
+function getHttpsRemoteActionRequest(action) {
+  switch (action) {
+    case "play_pause":
+      return {
+        endpointPath: "/v1/media?action=play",
+        body: null,
+      };
+    case "rewind":
+      return {
+        endpointPath: "/v1/media?action=scan",
+        body: {
+          direction: "backward",
+          durationInSeconds: "10",
+          speed: "1",
+        },
+      };
+    case "fast_forward":
+      return {
+        endpointPath: "/v1/media?action=scan",
+        body: {
+          direction: "forward",
+          durationInSeconds: "10",
+          speed: "1",
+        },
+      };
+    default:
+      return {
+        endpointPath: `/v1/FireTV?action=${encodeURIComponent(action)}`,
+        body: {},
+      };
+  }
 }
 
 export class FireTvHttpsTransport {
@@ -181,7 +211,7 @@ export class FireTvHttpsTransport {
         { details: response },
       );
     } catch (error) {
-      if (error?.code === "HTTPS_UNREACHABLE" || error?.code === "TLS_FAILED" || error?.code === "REQUEST_TIMEOUT") {
+      if (error?.code === "HTTPS_UNREACHABLE" || error?.code === "TLS_FAILED" || error?.code === "REQUEST_TIMEOUT" || error?.code === "HTTPS_RESPONSE_INTERRUPTED") {
         return {
           httpsReachable: false,
           tlsReady: error.code !== "TLS_FAILED",
@@ -309,11 +339,11 @@ export class FireTvHttpsTransport {
   }
 
   async sendRemoteAction(device, action) {
-    const endpointPath = `/v1/FireTV?action=${encodeURIComponent(action)}`;
+    const { endpointPath, body } = getHttpsRemoteActionRequest(action);
     const response = await this.request(device, {
       method: "POST",
       path: endpointPath,
-      body: {},
+      body,
       authRequired: true,
     });
 

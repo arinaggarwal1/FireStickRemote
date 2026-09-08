@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, nativeImage } from "electron";
-import { spawn } from "child_process";
+import { execFile, spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -22,7 +22,11 @@ const commonBinaryDirs = [
 
 let mainWindow = null;
 let serverProcess = null;
-let shuttingDown = false;
+let serverUrl = "";
+let isCleaningUp = false;
+let cleanupCompleted = false;
+let allowQuit = false;
+let cleanupPromise = null;
 
 app.commandLine.appendSwitch("disable-http-cache");
 
@@ -104,13 +108,49 @@ function startLocalServer() {
   });
 
   serverProcess = child;
+  child.once("exit", () => {
+    if (serverProcess === child) {
+      serverProcess = null;
+    }
+  });
   child.stdout?.on("data", (chunk) => logServerChunk("stdout", chunk));
   child.stderr?.on("data", (chunk) => logServerChunk("stderr", chunk));
   return waitForServerUrl(child);
 }
 
+function getShortcutDescriptor(input) {
+  if (input.type !== "keyDown" || input.isAutoRepeat) return null;
+
+  if (!input.meta || input.control || input.alt) return null;
+
+  if (input.key === "ArrowLeft") return "rewind";
+  if (input.key === "ArrowRight") return "fast_forward";
+  if (String(input.key).toLowerCase() === "h") return "home";
+  if (String(input.key).toLowerCase() === "p") return "play_pause";
+  if (/^[1-9]$/.test(String(input.key))) {
+    return `quick_launch_${input.key}`;
+  }
+
+  return null;
+}
+
+function wireNativeShortcuts(window) {
+  window.webContents.on("before-input-event", (event, input) => {
+    const descriptor = getShortcutDescriptor(input);
+    if (!descriptor) return;
+
+    event.preventDefault();
+    void window.webContents.executeJavaScript(
+      `window.__fireTvHandleShortcut?.(${JSON.stringify(descriptor)});`,
+      true,
+    ).catch((error) => {
+      console.error("Failed to dispatch native shortcut to renderer:", error);
+    });
+  });
+}
+
 async function createMainWindow() {
-  const serverUrl = await startLocalServer();
+  serverUrl = await startLocalServer();
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -129,6 +169,7 @@ async function createMainWindow() {
   });
 
   mainWindow.removeMenu();
+  wireNativeShortcuts(mainWindow);
   await mainWindow.webContents.session.clearCache();
   await mainWindow.loadURL(serverUrl);
 
@@ -138,15 +179,173 @@ async function createMainWindow() {
 }
 
 function stopLocalServer() {
-  if (!serverProcess || serverProcess.killed) return;
-
-  shuttingDown = true;
+  if (!serverProcess || serverProcess.killed) return Promise.resolve(false);
   serverProcess.kill("SIGTERM");
-  setTimeout(() => {
-    if (serverProcess && !serverProcess.killed) {
-      serverProcess.kill("SIGKILL");
+  return Promise.resolve(true);
+}
+
+function resolveAdbBinary() {
+  const candidates = [
+    process.env.ADB_PATH,
+    "/opt/homebrew/bin/adb",
+    "/usr/local/bin/adb",
+    "/usr/bin/adb",
+    "adb",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (candidate === "adb") return candidate;
+    try {
+      if (candidate && path.isAbsolute(candidate)) {
+        return candidate;
+      }
+    } catch (_) {}
+  }
+
+  return "adb";
+}
+
+function execAsync(command, args = [], options = {}) {
+  return new Promise((resolve) => {
+    execFile(command, args, {
+      timeout: options.timeout ?? 4000,
+      windowsHide: true,
+      env: options.env ?? process.env,
+      maxBuffer: options.maxBuffer ?? 1024 * 1024,
+    }, (error, stdout = "", stderr = "") => {
+      resolve({
+        ok: !error,
+        code: typeof error?.code === "number" ? error.code : 0,
+        error,
+        stdout: String(stdout || ""),
+        stderr: String(stderr || error?.message || ""),
+      });
+    });
+  });
+}
+
+async function waitForChildExit(childProcess, timeoutMs = 4000) {
+  if (!childProcess) return true;
+  if (childProcess.exitCode != null || childProcess.killed) return true;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(false);
+    }, timeoutMs);
+    timer.unref?.();
+
+    childProcess.once("exit", () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+async function requestServerShutdown(timeoutMs = 4500) {
+  if (!serverUrl) {
+    return { ok: false, skipped: true, reason: "missing_server_url" };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+
+  try {
+    const response = await fetch(new URL("/api/internal/shutdown", serverUrl), {
+      method: "POST",
+      signal: controller.signal,
+    });
+    return { ok: response.ok, status: response.status };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function disconnectAdbFallback() {
+  const adbBinary = resolveAdbBinary();
+  const devicesResult = await execAsync(adbBinary, ["devices"]);
+  const deviceLines = `${devicesResult.stdout}\n${devicesResult.stderr}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /\t(?:device|offline|unauthorized)$/.test(line));
+  const hosts = deviceLines.map((line) => line.split("\t")[0]).filter(Boolean);
+
+  const disconnectResults = [];
+  for (const host of hosts) {
+    disconnectResults.push({ host, ...(await execAsync(adbBinary, ["disconnect", host])) });
+  }
+
+  const disconnectAllResult = await execAsync(adbBinary, ["disconnect"]);
+  const killServerResult = await execAsync(adbBinary, ["kill-server"]);
+
+  console.log("[electron] ADB fallback cleanup complete.", {
+    hostsDisconnected: hosts.length,
+    disconnectResults: disconnectResults.map((result) => ({
+      host: result.host,
+      ok: result.ok,
+      code: result.code,
+    })),
+    disconnectAllOk: disconnectAllResult.ok,
+    killServerOk: killServerResult.ok,
+  });
+}
+
+async function cleanupAndExit(reason = "unknown") {
+  if (cleanupPromise) {
+    return cleanupPromise;
+  }
+
+  isCleaningUp = true;
+  cleanupPromise = (async () => {
+    console.log("[electron] Starting cleanup before exit.", {
+      reason,
+      serverRunning: Boolean(serverProcess),
+    });
+
+    try {
+      const shutdownResult = await requestServerShutdown();
+      console.log("[electron] Requested local server shutdown.", shutdownResult);
+    } catch (error) {
+      console.error("[electron] Failed to request local server shutdown:", error);
     }
-  }, 2500).unref();
+
+    try {
+      let exited = await waitForChildExit(serverProcess, 5000);
+      if (!exited && serverProcess) {
+        console.warn("[electron] Local server did not exit after shutdown request; sending SIGTERM.");
+        await stopLocalServer();
+        exited = await waitForChildExit(serverProcess, 2500);
+      }
+
+      if (!exited && serverProcess) {
+        console.warn("[electron] Local server still alive after SIGTERM; sending SIGKILL.");
+        serverProcess.kill("SIGKILL");
+        await waitForChildExit(serverProcess, 1000);
+      }
+    } catch (error) {
+      console.error("[electron] Error while stopping local server process:", error);
+    }
+
+    try {
+      await disconnectAdbFallback();
+    } catch (error) {
+      console.error("[electron] Error while running fallback ADB cleanup:", error);
+    }
+
+    cleanupCompleted = true;
+    console.log("[electron] Cleanup complete.");
+  })().finally(() => {
+    isCleaningUp = false;
+  });
+
+  return cleanupPromise;
 }
 
 app.whenReady().then(async () => {
@@ -162,6 +361,7 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error(error);
     await dialog.showErrorBox(APP_DISPLAY_NAME, String(error?.message || error));
+    allowQuit = true;
     app.quit();
   }
 
@@ -173,13 +373,25 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  stopLocalServer();
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on("before-quit", () => {
-  if (shuttingDown) return;
-  stopLocalServer();
+app.on("before-quit", (event) => {
+  if (allowQuit || cleanupCompleted) return;
+
+  event.preventDefault();
+  if (isCleaningUp) return;
+
+  void cleanupAndExit("before-quit").finally(() => {
+    allowQuit = true;
+    app.quit();
+  });
+});
+
+app.on("will-quit", () => {
+  if (!cleanupCompleted && !isCleaningUp) {
+    void cleanupAndExit("will-quit");
+  }
 });

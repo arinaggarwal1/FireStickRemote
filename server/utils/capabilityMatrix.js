@@ -38,6 +38,7 @@ export function deriveCapabilities(session) {
 export function deriveStatusLabel(session) {
   if (session?.authenticated) return "Remote ready";
   if (session?.pairingRequired) return "Pairing required";
+  if (session?.adbState === "offline") return "Restart ADB debugging on Fire TV";
   if (session?.adbConnected) return "HTTPS remote unavailable, using ADB fallback";
   if (session?.adbAvailable) return "ADB available for sideloading";
   if (session?.httpsReachable === false && session?.adbAvailable === false) return "Device unavailable";

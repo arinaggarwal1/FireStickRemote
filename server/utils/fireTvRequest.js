@@ -29,6 +29,10 @@ function getBodyPreview(bodyText) {
 export function createFireTvRequest({ devicesStore, logger = console }) {
   const httpsAgent = new https.Agent({
     keepAlive: true,
+    // Retire idle sockets before the TV silently drops its side of the connection.
+    timeout: REQUEST_TIMEOUT_MS,
+    maxFreeSockets: 1,
+    scheduling: "lifo",
     rejectUnauthorized: false,
   });
   const nonKeepAliveAgent = new https.Agent({
@@ -41,11 +45,12 @@ export function createFireTvRequest({ devicesStore, logger = console }) {
     const key = String(host || "");
     const previous = hostQueues.get(key) || Promise.resolve();
     const next = previous.catch(() => {}).then(work);
-    hostQueues.set(key, next.finally(() => {
-      if (hostQueues.get(key) === next) {
+    const cleanupPromise = next.catch(() => {}).finally(() => {
+      if (hostQueues.get(key) === cleanupPromise) {
         hostQueues.delete(key);
       }
-    }));
+    });
+    hostQueues.set(key, cleanupPromise);
     return next;
   }
 
@@ -152,6 +157,7 @@ export function createFireTvRequest({ devicesStore, logger = console }) {
 
     async function attemptRequest(attemptOptions) {
       return new Promise((resolve, reject) => {
+        const timeoutMs = options.timeoutMs || REQUEST_TIMEOUT_MS;
         const req = https.request(url, {
           method: options.method || "GET",
           headers: {
@@ -161,10 +167,21 @@ export function createFireTvRequest({ devicesStore, logger = console }) {
           agent: attemptOptions.disableKeepAlive ? nonKeepAliveAgent : httpsAgent,
         }, (res) => {
           let raw = "";
+          // A truncated response may never emit end (or a request error). Always
+          // settle it so this host's serialized request queue can continue.
+          const failResponse = (error) => {
+            clearTimeout(requestTimeoutId);
+            reject(createTransportError("HTTPS_RESPONSE_INTERRUPTED", "The Fire TV response was interrupted.", {
+              details: { causeCode: error?.code || null },
+            }));
+          };
+          res.on("aborted", failResponse);
+          res.on("error", failResponse);
           res.on("data", (chunk) => {
             raw += chunk.toString();
           });
           res.on("end", () => {
+            clearTimeout(requestTimeoutId);
             logger.info?.("Received Fire TV HTTPS response.", {
               requestId,
               host: normalizedHost,
@@ -174,6 +191,7 @@ export function createFireTvRequest({ devicesStore, logger = console }) {
               tokenExists: Boolean(token),
               responsePreview: getBodyPreview(raw),
               disableKeepAlive: attemptOptions.disableKeepAlive,
+              reusedSocket: Boolean(req.reusedSocket),
             });
             resolve({
               statusCode: res.statusCode || 0,
@@ -184,64 +202,84 @@ export function createFireTvRequest({ devicesStore, logger = console }) {
           });
         });
 
-        req.setTimeout(options.timeoutMs || REQUEST_TIMEOUT_MS, () => {
+        const requestTimeoutId = setTimeout(() => {
+          req.destroy(createTransportError("REQUEST_TIMEOUT", "The Fire TV request timed out.", { status: 504 }));
+        }, timeoutMs);
+
+        req.setTimeout(timeoutMs, () => {
           req.destroy(createTransportError("REQUEST_TIMEOUT", "The Fire TV request timed out.", { status: 504 }));
         });
 
-        req.on("error", async (error) => {
-          logger.error?.("Fire TV HTTPS request failed.", {
-            requestId,
-            host: normalizedHost,
-            path: requestPath,
-            method: options.method || "GET",
-            tokenExists: Boolean(token),
-            tokenPreview: getTokenPreview(token),
-            errorCode: error?.code || null,
-            errorMessage: error?.message || String(error),
-            disableKeepAlive: attemptOptions.disableKeepAlive,
-          });
-
-          if (
-            error?.code === "ECONNRESET" &&
-            !attemptOptions.disableKeepAlive &&
-            attemptOptions.retryOnConnectionReset !== false
-          ) {
-            logger.warn?.("Retrying Fire TV HTTPS request with keep-alive disabled after connection reset.", {
+        req.on("error", (error) => {
+          void (async () => {
+            clearTimeout(requestTimeoutId);
+            logger.error?.("Fire TV HTTPS request failed.", {
               requestId,
               host: normalizedHost,
               path: requestPath,
+              method: options.method || "GET",
+              tokenExists: Boolean(token),
+              tokenPreview: getTokenPreview(token),
+              errorCode: error?.code || null,
+              errorMessage: error?.message || String(error),
+              disableKeepAlive: attemptOptions.disableKeepAlive,
             });
-            try {
+
+            if (
+              (error?.code === "ECONNRESET" ||
+                (["GET", "HEAD"].includes(options.method || "GET") &&
+                 ["REQUEST_TIMEOUT", "ETIMEDOUT", "ERR_SOCKET_CONNECTION_TIMEOUT"].includes(error?.code))) &&
+              (["GET", "HEAD"].includes(options.method || "GET") || req.reusedSocket) &&
+              !attemptOptions.disableKeepAlive &&
+              attemptOptions.retryOnConnectionReset !== false
+            ) {
+              logger.warn?.("Retrying Fire TV HTTPS request on a fresh connection.", {
+                requestId,
+                host: normalizedHost,
+                path: requestPath,
+              });
               const retryResult = await attemptRequest({
                 ...attemptOptions,
                 disableKeepAlive: true,
                 retryOnConnectionReset: false,
               });
               resolve(retryResult);
-            } catch (retryError) {
-              reject(retryError);
+              return;
             }
-            return;
-          }
 
-          if (error?.code === "DEPTH_ZERO_SELF_SIGNED_CERT" || error?.code === "SELF_SIGNED_CERT_IN_CHAIN") {
-            reject(createTransportError("TLS_FAILED", "The Fire TV TLS session could not be established.", { details: error }));
-            return;
-          }
+            if (error?.code === "DEPTH_ZERO_SELF_SIGNED_CERT" || error?.code === "SELF_SIGNED_CERT_IN_CHAIN") {
+              reject(createTransportError("TLS_FAILED", "The Fire TV TLS session could not be established.", { details: error }));
+              return;
+            }
 
-          if (error?.code === "ECONNRESET" || error?.code === "ECONNREFUSED" || error?.code === "EHOSTUNREACH") {
-            reject(createTransportError("HTTPS_UNREACHABLE", "The Fire TV HTTPS remote service is unreachable.", { details: error }));
-            return;
-          }
+            if (
+              error?.code === "ECONNRESET" ||
+              error?.code === "ECONNREFUSED" ||
+              error?.code === "EHOSTUNREACH" ||
+              error?.code === "ENETUNREACH"
+            ) {
+              reject(createTransportError("HTTPS_UNREACHABLE", "The Fire TV HTTPS remote service is unreachable.", { details: error }));
+              return;
+            }
 
-          if (error?.code === "REQUEST_TIMEOUT") {
-            reject(error);
-            return;
-          }
+            if (
+              error?.code === "REQUEST_TIMEOUT" ||
+              error?.code === "ETIMEDOUT" ||
+              error?.code === "ERR_SOCKET_CONNECTION_TIMEOUT"
+            ) {
+              reject(createTransportError("REQUEST_TIMEOUT", "The Fire TV request timed out.", {
+                status: 504,
+                details: error,
+              }));
+              return;
+            }
 
-          reject(createTransportError("HTTPS_REQUEST_FAILED", error?.message || "Fire TV HTTPS request failed.", {
-            details: error,
-          }));
+            reject(createTransportError("HTTPS_REQUEST_FAILED", error?.message || "Fire TV HTTPS request failed.", {
+              details: error,
+            }));
+          })().catch((handlerError) => {
+            reject(handlerError);
+          });
         });
 
         req.end(bodyText);

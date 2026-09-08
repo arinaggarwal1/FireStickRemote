@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import multer from "multer";
 
 import { createDevicesStore } from "./models/devicesStore.js";
+import { createPreferencesStore } from "./models/preferencesStore.js";
 import { DeviceSessionManager } from "./sessions/deviceSessionManager.js";
 import { AdbTransport } from "./transports/adbTransport.js";
 import { FireTvHttpsTransport } from "./transports/firetvHttpsTransport.js";
@@ -29,10 +30,15 @@ const LEGACY_CONFIG_FILE = path.resolve(process.cwd(), "config.yml");
 const UPLOAD_DIR = path.resolve(DATA_DIR, "uploads");
 const DEFAULT_FRIENDLY_NAME = "Fire TV Remote Desktop";
 const debugLogger = createDebugLogger("firetv");
+let httpServer = null;
+let shutdownPromise = null;
 
 const devicesStore = createDevicesStore({
   dataDir: DATA_DIR,
   legacyConfigFile: LEGACY_CONFIG_FILE,
+});
+const preferencesStore = createPreferencesStore({
+  dataDir: DATA_DIR,
 });
 const adbTransport = new AdbTransport({ logger: debugLogger });
 const fireTvRequest = createFireTvRequest({ devicesStore, logger: debugLogger });
@@ -137,8 +143,71 @@ function getDeviceInput(body = {}, query = {}) {
   };
 }
 
+async function gracefulShutdown(reason = "unknown") {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+
+  shutdownPromise = (async () => {
+    debugLogger.info?.("Starting graceful server shutdown.", { reason });
+    let shutdownSummary = null;
+
+    try {
+      shutdownSummary = await sessionManager.shutdown();
+    } catch (error) {
+      debugLogger.error?.("Session shutdown failed during graceful server shutdown.", {
+        reason,
+        message: error?.message || String(error),
+      });
+    }
+
+    if (httpServer) {
+      await new Promise((resolve) => {
+        httpServer.close(() => resolve());
+      });
+    }
+
+    debugLogger.info?.("Graceful server shutdown complete.", {
+      reason,
+      shellSessionsKilled: shutdownSummary?.shellSessionsKilled ?? null,
+      adbDisconnectOk: shutdownSummary?.adbDisconnectOk ?? null,
+    });
+
+    return shutdownSummary;
+  })();
+
+  return shutdownPromise;
+}
+
 app.get("/api/devices", (req, res) => {
   sendSuccess(res, { devices: devicesStore.listDevices() });
+});
+
+app.get("/api/preferences", (req, res) => {
+  sendSuccess(res, {
+    preferences: preferencesStore.getPreferences(),
+  });
+});
+
+app.put("/api/preferences/quick-launch", (req, res) => {
+  const quickLaunchApps = preferencesStore.setQuickLaunchApps(req.body?.quickLaunchApps);
+  sendSuccess(res, {
+    quickLaunchApps,
+  });
+});
+
+app.put("/api/preferences/theme", (req, res) => {
+  const themeMode = preferencesStore.setThemeMode(req.body?.themeMode);
+  sendSuccess(res, {
+    themeMode,
+  });
+});
+
+app.put("/api/preferences/app-names", (req, res) => {
+  const appDisplayNames = preferencesStore.setAppDisplayNames(req.body?.appDisplayNames);
+  sendSuccess(res, {
+    appDisplayNames,
+  });
 });
 
 app.post("/api/devices", (req, res) => {
@@ -387,6 +456,17 @@ app.post("/api/adb/repair", async (req, res) => {
   }
 });
 
+app.post("/api/internal/shutdown", (req, res) => {
+  sendSuccess(res, { shuttingDown: true }, 202);
+  res.on("finish", () => {
+    setImmediate(() => {
+      void gracefulShutdown("api").finally(() => {
+        process.exit(0);
+      });
+    });
+  });
+});
+
 app.post("/api/sideload", (req, res) => {
   sideloadUpload.single("apk")(req, res, async (uploadError) => {
     if (uploadError) {
@@ -425,7 +505,7 @@ app.post("/api/sideload", (req, res) => {
   });
 });
 
-app.listen(PORT, HOST, function onListen() {
+httpServer = app.listen(PORT, HOST, function onListen() {
   const address = this.address();
   const resolvedPort = typeof address === "object" && address ? address.port : PORT;
   console.log(`Server listening on http://${HOST}:${resolvedPort}`);
@@ -434,3 +514,11 @@ app.listen(PORT, HOST, function onListen() {
 process.on("exit", () => {
   sessionManager.shutdown().catch(() => {});
 });
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    void gracefulShutdown(signal).finally(() => {
+      process.exit(0);
+    });
+  });
+}

@@ -10,9 +10,22 @@ import { createTransportError } from "../utils/transportErrors.js";
 const LEANBACK_LAUNCHER_PACKAGES = new Set(["com.amazon.firebat"]);
 const PACKAGE_NAME_PATTERN = /[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+/g;
 const SHELL_COMMAND_TIMEOUT_MS = 6000;
+const PERSISTENT_SHELL_RECOVERY_PATTERNS = [
+  /Persistent ADB shell closed/i,
+  /Persistent ADB shell failed/i,
+  /Persistent ADB shell command timed out/i,
+  /broken pipe/i,
+  /EPIPE/i,
+];
 
 function shellEscape(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function getLauncherCategory(packageName) {
@@ -61,6 +74,9 @@ export class AdbTransport {
   constructor({ logger = console } = {}) {
     this.shellSessions = new Map();
     this.logger = logger;
+    this.adbCommandQueue = Promise.resolve();
+    this.connectPromises = new Map();
+    this.repairPromises = new Map();
   }
 
   getAdbCandidates() {
@@ -99,7 +115,7 @@ export class AdbTransport {
   }
 
   runAdb(args, onData) {
-    return new Promise((resolve) => {
+    const run = () => new Promise((resolve) => {
       const adbBin = this.resolveAdbBinary();
       let proc;
       try {
@@ -126,6 +142,10 @@ export class AdbTransport {
         resolve({ code, stdout, stderr });
       });
     });
+
+    const scheduled = this.adbCommandQueue.then(run, run);
+    this.adbCommandQueue = scheduled.then(() => undefined, () => undefined);
+    return scheduled;
   }
 
   runTargetedAdb(host, args) {
@@ -265,6 +285,30 @@ export class AdbTransport {
     });
   }
 
+  isRecoverablePersistentShellError(error) {
+    const message = String(error?.message || error || "");
+    return PERSISTENT_SHELL_RECOVERY_PATTERNS.some((pattern) => pattern.test(message));
+  }
+
+  async runPersistentShellCommandWithRetry(host, command) {
+    try {
+      return await this.runPersistentShellCommand(host, command);
+    } catch (error) {
+      if (!this.isRecoverablePersistentShellError(error)) {
+        throw error;
+      }
+
+      this.logger.warn?.("Recovering from persistent ADB shell failure by recreating the shell session.", {
+        host: getAdbTargetHost(host),
+        command,
+        message: error?.message || String(error),
+      });
+
+      await this.closeShellSession(host).catch(() => {});
+      return this.runPersistentShellCommand(host, command);
+    }
+  }
+
   async closeShellSession(deviceOrHost) {
     const adbHost = getAdbTargetHost(typeof deviceOrHost === "string" ? deviceOrHost : deviceOrHost?.host);
     const session = this.shellSessions.get(adbHost);
@@ -278,23 +322,36 @@ export class AdbTransport {
   async closeAllShellSessions() {
     const hosts = [...this.shellSessions.keys()];
     await Promise.all(hosts.map((host) => this.closeShellSession(host)));
+    return hosts.length;
+  }
+
+  getShellSessionCount() {
+    return this.shellSessions.size;
   }
 
   async probe(device) {
     const { adbAvailable, adbBinary } = this.getAvailability();
 
     if (!adbAvailable) {
-      return { adbAvailable: false, adbConnected: false, adbHost: getAdbTargetHost(device.host) };
+      return {
+        adbAvailable: false,
+        adbConnected: false,
+        adbState: "unavailable",
+        adbHost: getAdbTargetHost(device.host),
+      };
     }
 
     const devicesResult = await this.runAdb(["devices"]);
     const adbHost = getAdbTargetHost(device.host);
     const lines = `${devicesResult.stdout || ""}\n${devicesResult.stderr || ""}`.split(/\r?\n/);
-    const adbConnected = lines.some((line) => line.trim().startsWith(`${adbHost}\tdevice`));
+    const matchingLine = lines.find((line) => line.trim().startsWith(`${adbHost}\t`))?.trim() || "";
+    const adbState = matchingLine ? matchingLine.slice(`${adbHost}\t`.length).trim() : "disconnected";
+    const adbConnected = adbState === "device";
 
     return {
       adbAvailable: true,
       adbConnected,
+      adbState,
       adbHost,
       adbBinary,
       devicesResult,
@@ -303,14 +360,98 @@ export class AdbTransport {
 
   async connect(device) {
     const adbHost = getAdbTargetHost(device.host);
-    const result = await this.runAdb(["connect", adbHost]);
-    const output = `${result.stdout || ""} ${result.stderr || ""}`;
-    const ok = result.code === 0 && /connected to|already connected/i.test(output);
+    if (this.connectPromises.has(adbHost)) {
+      return this.connectPromises.get(adbHost);
+    }
+
+    const connectPromise = this.connectInternal(device).finally(() => {
+      this.connectPromises.delete(adbHost);
+    });
+    this.connectPromises.set(adbHost, connectPromise);
+    return connectPromise;
+  }
+
+  async connectInternal(device) {
+    const adbHost = getAdbTargetHost(device.host);
+    await this.closeShellSession(device.host).catch(() => {});
+
+    const attempts = [];
+    const recordAttempt = (label, result) => {
+      attempts.push({
+        label,
+        code: result?.code ?? null,
+        stdout: result?.stdout || "",
+        stderr: result?.stderr || "",
+      });
+    };
+
+    const trySequence = async (label, steps) => {
+      for (const args of steps) {
+        const result = await this.runAdb(args);
+        recordAttempt(`${label}:${args.join(" ")}`, result);
+      }
+
+      await sleep(180);
+      const probe = await this.probe(device);
+      return {
+        probe,
+        ok: Boolean(probe.adbConnected),
+      };
+    };
+
+    const initialProbe = await this.probe(device);
+    if (initialProbe.adbState === "offline") {
+      const staleDisconnect = await this.runAdb(["disconnect", adbHost]);
+      recordAttempt("initial:disconnect-offline", staleDisconnect);
+      await sleep(180);
+    }
+
+    const directConnectResult = await this.runAdb(["connect", adbHost]);
+    recordAttempt("initial:connect", directConnectResult);
+    let postConnectProbe = await this.probe(device);
+
+    if (!postConnectProbe.adbConnected) {
+      const directReconnect = await trySequence("reconnect", [
+        ["disconnect", adbHost],
+        ["connect", adbHost],
+      ]);
+      postConnectProbe = directReconnect.probe;
+    }
+
+    if (!postConnectProbe.adbConnected) {
+      const offlineRecovery = await trySequence("offline-recovery", [
+        ["reconnect", "offline"],
+        ["disconnect", adbHost],
+        ["connect", adbHost],
+      ]);
+      postConnectProbe = offlineRecovery.probe;
+    }
+
+    if (!postConnectProbe.adbConnected) {
+      const serverRestart = await trySequence("server-restart", [
+        ["kill-server"],
+        ["start-server"],
+        ["connect", adbHost],
+      ]);
+      postConnectProbe = serverRestart.probe;
+    }
+
+    const ok = Boolean(postConnectProbe.adbConnected);
+
+    if (!postConnectProbe.adbConnected) {
+      this.logger.warn?.("ADB connect did not reach a stable device state.", {
+        host: adbHost,
+        attempts,
+      });
+    }
+
     return {
       ok,
       transportUsed: "adb",
       adbHost,
-      result,
+      result: directConnectResult,
+      probe: postConnectProbe,
+      attempts,
     };
   }
 
@@ -329,26 +470,63 @@ export class AdbTransport {
 
   async repair(device) {
     const adbHost = device?.host ? getAdbTargetHost(device.host) : null;
+    if (adbHost && this.repairPromises.has(adbHost)) {
+      return this.repairPromises.get(adbHost);
+    }
+
+    const repairPromise = this.repairInternal(device).finally(() => {
+      if (adbHost) {
+        this.repairPromises.delete(adbHost);
+      }
+    });
+
+    if (adbHost) {
+      this.repairPromises.set(adbHost, repairPromise);
+    }
+
+    return repairPromise;
+  }
+
+  async repairInternal(device) {
+    const adbHost = device?.host ? getAdbTargetHost(device.host) : null;
     await this.closeAllShellSessions();
 
+    const reconnectOfflineResult = await this.runAdb(["reconnect", "offline"]);
     const disconnectResult = adbHost
       ? await this.runAdb(["disconnect", adbHost])
-      : { code: 0, stdout: "", stderr: "" };
+      : await this.runAdb(["disconnect"]);
     const killResult = await this.runAdb(["kill-server"]);
     const startResult = await this.runAdb(["start-server"]);
     const devicesResult = await this.runAdb(["devices"]);
+    const reconnectResult = adbHost
+      ? await this.runAdb(["connect", adbHost])
+      : { code: 0, stdout: "", stderr: "" };
+    const probe = device?.host
+      ? await this.probe(device)
+      : {
+          adbAvailable: true,
+          adbConnected: false,
+          adbState: "disconnected",
+          adbHost: null,
+          devicesResult,
+        };
 
-    const ok = [disconnectResult, killResult, startResult, devicesResult].every((result) => result.code === 0);
+    const ok = device?.host
+      ? Boolean(probe.adbConnected)
+      : [reconnectOfflineResult, disconnectResult, killResult, startResult, devicesResult].every((result) => result.code === 0);
 
     return {
       ok,
       transportUsed: "adb",
       adbHost,
+      probe,
       details: {
+        reconnectOffline: reconnectOfflineResult,
         disconnect: disconnectResult,
         killServer: killResult,
         startServer: startResult,
         devices: devicesResult,
+        reconnect: reconnectResult,
       },
     };
   }
@@ -359,7 +537,7 @@ export class AdbTransport {
       throw createTransportError("UNSUPPORTED_ACTION", `ADB does not support remote action "${action}".`, { status: 400 });
     }
 
-    const result = await this.runPersistentShellCommand(device.host, `input keyevent ${String(keycode)}`);
+    const result = await this.runPersistentShellCommandWithRetry(device.host, `input keyevent ${String(keycode)}`);
     if (result.code !== 0) {
       throw createTransportError("ADB_REMOTE_FAILED", result.stderr || result.stdout || "ADB remote command failed.", {
         details: result,
@@ -371,7 +549,7 @@ export class AdbTransport {
 
   async sendText(device, text) {
     const encoded = String(text || "").replace(/\r?\n/g, " ").replace(/ /g, "%s");
-    const result = await this.runPersistentShellCommand(device.host, `input text ${shellEscape(encoded)}`);
+    const result = await this.runPersistentShellCommandWithRetry(device.host, `input text ${shellEscape(encoded)}`);
     if (result.code !== 0) {
       throw createTransportError("ADB_TEXT_FAILED", result.stderr || result.stdout || "ADB text input failed.", {
         details: result,
@@ -429,13 +607,13 @@ export class AdbTransport {
 
   async launchApp(device, appId) {
     const primaryCategory = getLauncherCategory(appId);
-    let result = await this.runPersistentShellCommand(
+    let result = await this.runPersistentShellCommandWithRetry(
       device.host,
       `monkey -p ${shellEscape(appId)} -c ${shellEscape(primaryCategory)} 1`,
     );
 
     if (result.code !== 0 && primaryCategory !== "android.intent.category.LEANBACK_LAUNCHER") {
-      result = await this.runPersistentShellCommand(
+      result = await this.runPersistentShellCommandWithRetry(
         device.host,
         `monkey -p ${shellEscape(appId)} -c 'android.intent.category.LEANBACK_LAUNCHER' 1`,
       );
@@ -466,7 +644,7 @@ export class AdbTransport {
   async swipe(device, gesture) {
     const { x1, y1, x2, y2, durationMs } = gesture;
     const duration = typeof durationMs === "number" ? durationMs : 150;
-    const result = await this.runPersistentShellCommand(
+    const result = await this.runPersistentShellCommandWithRetry(
       device.host,
       `input swipe ${String(x1)} ${String(y1)} ${String(x2)} ${String(y2)} ${String(duration)}`,
     );

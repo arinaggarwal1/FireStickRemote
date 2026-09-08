@@ -2,32 +2,43 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fire TV Remote</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
     <!-- Favicon -->
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon_io/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="/favicon_io/site.webmanifest">
-    <link rel="stylesheet" href="/styles.css?v=20260402-ui2" />
+    <link rel="stylesheet" href="/styles.css?v=20260908" />
   </head>
   <body>
     <div id="app">
       <header class="app-header">
         <div class="hero-copy">
           <div class="header-brand">
-            <img src="/favicon_io/remote_icon.png" alt="Remote" class="header-icon" />
+            <img src="/favicon_io/remote_icon.png" alt="" class="header-icon" />
             <div class="brand-copy">
               <h1>Fire TV Remote</h1>
+              <p class="brand-subtitle">A little closer to your TV.</p>
             </div>
           </div>
         </div>
+        <button id="themeToggleBtn" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode">
+          <span class="theme-toggle-track" aria-hidden="true">
+            <span class="theme-toggle-thumb"></span>
+            <span class="theme-icon theme-icon-moon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"></path>
+              </svg>
+            </span>
+            <span class="theme-icon theme-icon-sun">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77"></path>
+              </svg>
+            </span>
+          </span>
+        </button>
       </header>
 
       <main class="app-shell">
@@ -48,7 +59,7 @@
                 id="hostInput"
                 type="text"
                 inputmode="url"
-                placeholder="10.194.20.230 or 10.194.20.230:5555"
+                placeholder="192.168.1.100"
                 autocomplete="off"
                 spellcheck="false"
               />
@@ -145,7 +156,7 @@
                 <p id="sideloadCapabilityHint" class="capability-copy"></p>
 
                 <label class="sideload-picker" for="apkFileInput">
-                  <input id="apkFileInput" type="file" accept=".apk,application/vnd.android.package-archive" hidden />
+                  <input id="apkFileInput" type="file" accept=".apk,application/vnd.android.package-archive" aria-label="Choose APK file" />
                   <span class="btn secondary pick-apk-btn">Choose APK</span>
                   <span id="apkFileMeta" class="apk-file-meta">No APK selected</span>
                 </label>
@@ -154,7 +165,7 @@
                   <input id="replaceExistingCheckbox" type="checkbox" />
                   <span>
                     Replace existing app
-                    <small>Uses <code>adb install -r</code> for app updates.</small>
+                    <small>Update an installed app, keeping its data.</small>
                   </span>
                 </label>
 
@@ -171,21 +182,17 @@
           <section class="remote-panel" aria-labelledby="remotePanelTitle">
             <div class="remote-panel-header">
               <div>
-                <h2 id="remotePanelTitle">Fire TV Control Surface</h2>
+                <h2 id="remotePanelTitle">Remote</h2>
               </div>
               <div class="live-indicator">
                 <div id="indicator" aria-hidden="true"></div>
-                <span>Live commands</span>
+                <span>Command activity</span>
               </div>
             </div>
 
             <div class="remote-body">
               <div class="system-row">
-                <button class="remote-chip danger" data-action="power" aria-label="Power">
-                  <img class="icon" src="/icons/power.svg" alt="" />
-                  <span>Power</span>
-                </button>
-                <button class="remote-chip" data-action="home" aria-label="Home">
+                <button class="remote-chip danger" data-action="home" aria-label="Home">
                   <img class="icon" src="/icons/home.svg" alt="" />
                   <span>Home</span>
                 </button>
@@ -196,18 +203,10 @@
               </div>
 
               <div class="remote-center">
-                <div class="transport-column">
+                <div class="transport-column side-control">
                   <button class="remote-pill" data-action="rewind" aria-label="Rewind">
                     <img class="icon" src="/icons/rewind.svg" alt="" />
                     <span>Rewind</span>
-                  </button>
-                  <button class="remote-pill" data-action="play_pause" aria-label="Play or Pause">
-                    <img class="icon" src="/icons/play-pause.svg" alt="" />
-                    <span>Play/Pause</span>
-                  </button>
-                  <button class="remote-pill" data-action="fast_forward" aria-label="Fast Forward">
-                    <img class="icon" src="/icons/fast-forward.svg" alt="" />
-                    <span>Forward</span>
                   </button>
                 </div>
 
@@ -238,28 +237,28 @@
                       <span class="dpad-spacer" aria-hidden="true"></span>
                     </div>
                   </div>
-                  <button class="remote-chip back-chip" data-action="back" aria-label="Back">
-                    <img class="icon" src="/icons/back.svg" alt="" />
-                    <span>Back</span>
-                  </button>
                 </div>
 
-                <div class="volume-column">
-                  <button class="remote-pill" data-action="volume_up" aria-label="Volume Up">
-                    <img class="icon" src="/icons/volume-up.svg" alt="" />
-                    <span>Vol +</span>
-                  </button>
-                  <button class="remote-pill" data-action="mute" aria-label="Mute">
-                    <img class="icon" src="/icons/mute.svg" alt="" />
-                    <span>Mute</span>
-                  </button>
-                  <button class="remote-pill" data-action="volume_down" aria-label="Volume Down">
-                    <img class="icon" src="/icons/volume-down.svg" alt="" />
-                    <span>Vol -</span>
+                <div class="transport-column side-control">
+                  <button class="remote-pill" data-action="fast_forward" aria-label="Fast Forward">
+                    <img class="icon" src="/icons/fast-forward.svg" alt="" />
+                    <span>Forward</span>
                   </button>
                 </div>
               </div>
+
+              <div class="system-row center-actions">
+                <button class="remote-chip center-action-chip" data-action="back" aria-label="Back">
+                  <img class="icon" src="/icons/back.svg" alt="" />
+                  <span>Back</span>
+                </button>
+                <button class="remote-chip center-action-chip" data-action="play_pause" aria-label="Play or Pause">
+                  <img class="icon" src="/icons/play-pause.svg" alt="" />
+                  <span>Play / Pause</span>
+                </button>
+              </div>
             </div>
+            <p class="remote-keyboard-hint"><kbd>↑ ↓ ← →</kbd> Navigate &nbsp; · &nbsp; <kbd>Enter</kbd> Select &nbsp; · &nbsp; <kbd>⌫</kbd> Back</p>
           </section>
 
           <section class="app-section" aria-labelledby="quickLaunchTitle">
@@ -275,30 +274,54 @@
             <p id="appsCapabilityHint" class="capability-copy"></p>
             <div id="quickLaunchGrid" class="app-grid quick-launch-grid"></div>
 
-            <div id="quickLaunchEditPanel" class="quick-launch-editor" hidden>
-              <div class="quick-launch-editor-card">
-                <div class="quick-launch-editor-header">
-                  <div>
-                    <h3>All Installed Apps</h3>
-                    <p>Select the apps that should stay pinned.</p>
-                  </div>
-                  <button id="closeQuickLaunchEditorBtn" class="btn secondary" type="button">Done</button>
-                </div>
-                <label class="sr-only" for="appSearchInput">Search installed apps</label>
-                <input
-                  id="appSearchInput"
-                  class="app-search-input"
-                  type="text"
-                  placeholder="Search installed apps"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <div id="allAppsGrid" class="app-grid all-apps-grid"></div>
-              </div>
-            </div>
           </section>
         </section>
       </main>
+
+      <div id="quickLaunchEditPanel" class="quick-launch-editor modal" hidden>
+        <div class="modal-backdrop" data-close-quick-launch="true"></div>
+        <section class="quick-launch-editor-card modal-panel" aria-labelledby="quickLaunchEditorTitle" aria-modal="true" role="dialog">
+          <div class="quick-launch-editor-header">
+            <div>
+              <h3 id="quickLaunchEditorTitle">Edit Quick Launch</h3>
+              <p>Drag pinned apps into order, then add more from the library.</p>
+            </div>
+            <button id="closeQuickLaunchEditorBtn" class="btn secondary" type="button">Done</button>
+          </div>
+          <div class="quick-launch-editor-layout">
+            <section class="quick-launch-column quick-launch-column-selected" aria-labelledby="selectedQuickLaunchTitle">
+              <div class="quick-launch-column-header">
+                <div>
+                  <h4 id="selectedQuickLaunchTitle">Pinned Apps</h4>
+                  <p>Drag cards to reorder your launcher.</p>
+                </div>
+                <span id="selectedQuickLaunchCount" class="saved-count">0 pinned</span>
+              </div>
+              <div id="selectedQuickLaunchList" class="quick-launch-list selected-quick-launch-list"></div>
+            </section>
+
+            <section class="quick-launch-column quick-launch-column-available" aria-labelledby="availableAppsTitle">
+              <div class="quick-launch-column-header">
+                <div>
+                  <h4 id="availableAppsTitle">Available Apps</h4>
+                  <p>Add more apps from this Fire TV.</p>
+                </div>
+                <span id="availableAppsCount" class="saved-count">0 available</span>
+              </div>
+              <label class="sr-only" for="appSearchInput">Search installed apps</label>
+              <input
+                id="appSearchInput"
+                class="app-search-input"
+                type="text"
+                placeholder="Search available apps"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div id="allAppsGrid" class="quick-launch-list available-apps-list"></div>
+            </section>
+          </div>
+        </section>
+      </div>
 
       <div id="deviceModal" class="modal" hidden>
         <div class="modal-backdrop" data-close-modal="true"></div>
@@ -361,6 +384,6 @@
       </div>
     </div>
 
-    <script src="/main.js?v=20260402-ui2"></script>
+    <script src="/main.js?v=20260908"></script>
   </body>
 </html>

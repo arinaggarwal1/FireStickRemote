@@ -7,7 +7,7 @@ It gives you:
 - HTTPS-first remote control with seamless ADB fallback where needed
 - explicit text send with a compose box and a dedicated `Send Text` button
 - HTTPS pairing with persisted client tokens for saved devices
-- a persistent saved-device manager with named Fire TV targets
+- a persistent saved-device manager with named Fire TV targets and a launch default
 - a dynamic Quick Launch grid built from the apps actually installed on your Fire TV, including sideloaded apps
 - APK sideloading through ADB when remote-style features are already working over HTTPS
 - a packaged macOS app + DMG build flow
@@ -26,6 +26,73 @@ Inside the desktop app:
 - the server keeps ADB available for sideloading, app-launch fallback, and unsupported operations
 
 The same Express server can still be run by itself for local development or server-style deployment, but the primary workflow is now the desktop app.
+
+## How HTTPS Control Works
+
+The app does not treat Fire TV connectivity as a single on/off switch.
+
+Instead, each connection is evaluated as a session with:
+- HTTPS reachability on port `8080`
+- whether the Fire TV TLS endpoint is responding
+- whether the device already has a saved client token
+- whether pairing is required
+- whether ADB is installed locally
+- whether ADB is currently connected to that Fire TV
+- per-feature capability routing for remote control, text, app discovery, launching, and sideloading
+
+### Fire TV HTTPS remote summary
+
+Fire TV exposes a local HTTPS control service on:
+
+```text
+https://<firetv-ip>:8080
+```
+
+Important behavior:
+- port `8080` is HTTPS-only
+- plain HTTP probing to `8080` is not a valid check
+- the service expects a static API key header
+- authenticated control also requires a per-device client token
+- that client token is obtained by pairing once on the TV and then persisted with the saved device
+
+The reverse-engineered details live in:
+- [`docs/FIRETV_HTTPS_PROTOCOL.md`](/Users/arinaggarwal/Documents/Software%20Dev/FireStickRemote/docs/FIRETV_HTTPS_PROTOCOL.md)
+
+### What the app does on connect
+
+When you press `Connect`, the backend:
+1. normalizes the host you entered
+2. tries the Fire TV HTTPS remote service first
+3. checks whether the saved device already has a valid client token
+4. derives a capability map for remote control, text input, app listing, app launch, sideloading, and swipe support
+5. keeps ADB available as a fallback for the features HTTPS cannot fully cover
+
+If the Fire TV is reachable over HTTPS but does not yet trust this app, the UI shows the pairing panel instead of a generic failure.
+
+### Pair once, then reuse the token
+
+The first-time pairing flow is:
+1. connect to the Fire TV by IP
+2. request a PIN on the TV with `POST /api/pair/display`
+3. enter the PIN shown on the TV
+4. verify it with `POST /api/pair/verify`
+5. persist the returned `x-client-token` with that saved device
+
+After that, the app can reuse the token automatically for future HTTPS sessions against the same saved Fire TV entry.
+
+### Feature routing
+
+The backend chooses transports by capability, not by forcing one transport globally.
+
+Current routing defaults:
+- remote controls: HTTPS first, ADB fallback
+- text input: HTTPS first, ADB fallback
+- installed app discovery: HTTPS first, ADB fallback and merge
+- app launch: ADB-backed path
+- APK sideloading: ADB only
+- swipe: ADB only
+
+That means the app can still be useful even when one transport is partially degraded.
 
 ## Requirements
 
@@ -140,7 +207,22 @@ Each saved device can now keep:
 - the user-facing host you entered
 - a derived ADB host
 - the Fire TV HTTPS client token
+- whether it is the default device for launch-time auto-connect
 - last-known capabilities and connection diagnostics
+
+The persisted JSON store now keeps both the saved device list and a `defaultDeviceId`.
+
+### Default saved device
+
+From the Saved Devices modal, you can mark one Fire TV as the default device.
+
+On launch, the app will:
+1. load saved devices
+2. find the saved entry marked as default
+3. load its host into the connection field
+4. immediately attempt a connection once
+
+If no default device is set, startup behaves normally and waits for manual connection.
 
 ### Quick Launch selections
 
@@ -160,6 +242,7 @@ You can:
 - add a Fire TV by name
 - edit saved devices
 - delete saved devices
+- set or clear a default device for launch-time auto-connect
 - load a device into the connection field
 - connect directly from the saved-device modal
 
@@ -184,16 +267,10 @@ The remote includes:
 
 The frontend now speaks in semantic actions. The backend chooses the best transport automatically.
 
-### Pairing
-
-When HTTPS is reachable but no valid Fire TV client token is saved, the app shows a pairing panel instead of failing generically.
-
-Pairing flow:
-1. connect to the Fire TV by IP
-2. request a PIN on the TV with `POST /api/pair/display`
-3. enter the PIN in the pairing panel
-4. verify with `POST /api/pair/verify`
-5. keep the returned client token with the saved device when possible
+For the verified HTTPS media subset, the backend maps:
+- `play_pause` -> `POST /v1/media?action=play`
+- `rewind` -> `POST /v1/media?action=scan` with `{ "direction": "backward", "durationInSeconds": "10", "speed": "1" }`
+- `fast_forward` -> `POST /v1/media?action=scan` with `{ "direction": "forward", "durationInSeconds": "10", "speed": "1" }`
 
 ### Text sending
 
@@ -244,6 +321,12 @@ Feature routing defaults:
 - app listing: HTTPS `appsV2` first, ADB fallback
 - app launch: ADB fallback path
 - APK sideloading: ADB only
+
+Session status labels are derived from capability state, for example:
+- `Remote ready`
+- `Pairing required`
+- `HTTPS remote unavailable, using ADB fallback`
+- `ADB available for sideloading`
 
 ## Installed App Discovery
 
@@ -309,6 +392,8 @@ Current backend routes:
 - `POST /api/devices`
 - `PUT /api/devices/:id`
 - `DELETE /api/devices/:id`
+- `POST /api/devices/:id/default`
+- `DELETE /api/devices/:id/default`
 - `GET /api/session?host=HOST`
 - `GET /api/apps?host=HOST`
 - `POST /api/connect`
@@ -363,6 +448,8 @@ FireStickRemote/
 - The frontend is plain HTML/CSS/JS with no bundler.
 - The desktop shell is Electron.
 - The backend is an Express server with a hybrid HTTPS-first transport layer plus ADB fallback.
+- HTTPS requests are sent against the Fire TV service on `https://<host>:8080` with a static API key and a persisted per-device client token when available.
+- Pairing requests are intentionally handled conservatively because Fire TV pairing POSTs can be more brittle than normal remote traffic.
 - Static assets are served with no-cache headers so the desktop shell pulls fresh frontend code after changes.
 - The packaged app uses a custom rounded icon and proper app metadata (`Fire TV Remote`) instead of showing the stock Electron app name.
 - `npm test` runs unit coverage for host normalization, action mapping, capability derivation, devices-store migration, and hybrid transport selection.
@@ -400,6 +487,17 @@ Check:
 1. you are connecting to the same saved device entry
 2. `devices.json` is writable in the app data directory
 3. the Fire TV has not invalidated the previous client token
+4. you did not create a second saved entry for the same TV and connect through the wrong one
+
+### HTTPS connect works but some actions still use ADB
+
+That can be expected.
+
+The app does not force every feature over HTTPS just because pairing succeeded. Some features still prefer or require ADB:
+- APK sideloading
+- app launching fallback
+- swipe support
+- any temporary fallback when HTTPS behavior is incomplete for a specific Fire TV state
 
 ### Packaged app opens but macOS warns about it
 

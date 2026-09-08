@@ -310,6 +310,66 @@ Observed:
 - returns `201 Created`
 - usable as a wake/launch primitive for the remote service
 
+## Verified Media Control Mapping
+
+Media control does not use the same endpoint family as navigation.
+
+Confirmed split:
+
+```text
+/v1/FireTV?action=...   -> navigation and core remote actions
+/v1/media?action=...    -> playback and scan controls
+```
+
+### Play / Pause
+
+```http
+POST /v1/media?action=play
+```
+
+Notes:
+- this is a toggle, not a dedicated pause endpoint
+- the Fire TV or active app decides whether the result is play or pause
+- no request body is required
+
+### Fast Forward
+
+```http
+POST /v1/media?action=scan
+```
+
+Body:
+
+```json
+{
+  "direction": "forward",
+  "durationInSeconds": "10",
+  "speed": "1"
+}
+```
+
+### Rewind
+
+```http
+POST /v1/media?action=scan
+```
+
+Body:
+
+```json
+{
+  "direction": "backward",
+  "durationInSeconds": "10",
+  "speed": "1"
+}
+```
+
+Important details:
+- `durationInSeconds` should be sent as a string
+- `speed` should also be sent as a string
+- media behavior is app-dependent and generally requires active playback
+- `/v1/media` is stateless and does not use keyDown/keyUp semantics
+
 ## Likely Useful Endpoints
 
 These endpoints appeared promising and were incorporated into the app design:
@@ -489,6 +549,8 @@ Based on the observed protocol, a good production transport policy is:
 
 - remote directional controls
 - home/back/menu/select
+- play/pause via `/v1/media?action=play`
+- rewind / fast forward via `/v1/media?action=scan`
 - text input
 - app discovery
 - pairing
@@ -520,7 +582,7 @@ The following areas remain only partially characterized:
 - the full supported `action=` vocabulary for `/v1/FireTV`
 - whether there is a stable HTTPS-native app launch endpoint
 - exact semantics of `/v1/FireTV/keyboard`
-- exact media action set under `/v1/media?action=...`
+- the full media action set under `/v1/media?action=...` beyond the verified subset above
 - whether different Fire OS versions return `401` vs `403` consistently
 - whether the Java NPE behavior is firmware-specific
 
