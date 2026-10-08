@@ -78,6 +78,15 @@ body:not([data-theme="light"]) .theme-icon-moon, body[data-theme="light"] .theme
 .connection-bar button { padding-inline: 12px; }
 .connection-card-actions, .text-actions, .sideload-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .connection-card-actions button { font-size: 12px; }
+.desktop-updater { display: grid; gap: 7px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
+.desktop-updater-heading, .update-progress-row, .update-action-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.desktop-updater-heading > span { color: var(--muted); font-size: 10px; }
+.desktop-updater-heading button, .update-action-row button { min-height: 32px; padding: 5px 9px; font-size: 10px; white-space: nowrap; }
+.update-message { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.update-message:empty { display: none; }
+.update-progress-row { justify-content: flex-start; color: var(--muted); font-size: 10px; }
+.update-progress-row progress { width: 100%; height: 7px; accent-color: var(--accent); }
+.update-action-row { justify-content: flex-end; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .btn.secondary { background: transparent; color: var(--muted-strong); }
 .send-text-btn, .manager-primary, #connectBtn.disconnected, .app-manage-primary, .select { background: var(--accent); color: var(--accent-contrast); border-color: transparent; }
@@ -108,8 +117,15 @@ body:not([data-theme="light"]) .theme-icon-moon, body[data-theme="light"] .theme
 #indicator.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .remote-body { margin-top: 18px; padding: 20px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 8px; }
 .system-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.remote-command-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .remote-chip, .remote-pill { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; width: 100%; padding: 10px; }
 .remote-chip span, .remote-pill span { font-size: 12px; }
+.power-chip { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); }
+.power-chip .icon { filter: none; }
+.volume-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.volume-chip, .mute-chip { min-height: 52px; background: var(--panel); }
+.volume-chip .icon, .mute-chip .icon { width: 19px; height: 19px; }
+.remote-device-control-hint { margin-top: 9px; color: var(--muted); text-align: center; font-size: 10px; }
 .remote-center { display: grid; grid-template-columns: minmax(64px, 1fr) 252px minmax(64px, 1fr); gap: 16px; align-items: center; margin: 18px 0; }
 .remote-pill { flex-direction: column; background: transparent; border-color: transparent; gap: 7px; }
 .dpad { width: 252px; aspect-ratio: 1; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -196,6 +212,9 @@ kbd { font: inherit; color: var(--muted-strong); }
   .quick-launch-row { grid-template-columns: 1fr; }
   .connection-card, .remote-panel, .app-section { padding: 12px; }
   .remote-body { padding: 10px; }
+  .remote-command-row, .volume-controls { gap: 6px; }
+  .remote-command-row .remote-chip, .volume-controls .remote-chip { gap: 5px; padding: 8px 4px; }
+  .remote-command-row .remote-chip span, .volume-controls .remote-chip span { font-size: 10px; }
   .dpad { width: 232px; }
   h1 { font-size: 19px; }
 }

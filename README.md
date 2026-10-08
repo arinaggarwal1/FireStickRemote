@@ -157,7 +157,7 @@ http://localhost:9090
 
 ## Package a macOS App
 
-To build a fresh drag-to-Applications DMG:
+To build a fresh drag-to-Applications DMG and the ZIP archive used by macOS in-app updates:
 
 ```bash
 npm run desktop:package
@@ -166,15 +166,11 @@ npm run desktop:package
 This command:
 - deletes the previous `dist/` output first
 - builds a real macOS `.app`
-- creates a DMG you can distribute or install locally
+- creates a DMG and an updater ZIP for the current Mac architecture
 
-Output files:
-- [`dist/Fire TV Remote-1.0.0-arm64.dmg`](/Users/arinaggarwal/Documents/Software Dev/FireStickRemote/dist/Fire TV Remote-1.0.0-arm64.dmg)
-- [`dist/mac-arm64/Fire TV Remote.app`](/Users/arinaggarwal/Documents/Software Dev/FireStickRemote/dist/mac-arm64/Fire TV Remote.app)
+Release packaging, signing requirements, verification, and the first-upgrade path are documented in [`docs/DESKTOP_UPDATES.md`](docs/DESKTOP_UPDATES.md).
 
-Note:
-- the packaged app is currently unsigned
-- macOS may require `Right click -> Open` the first time you launch it
+In-app installation requires a Developer ID signed app in a writable Applications folder. Development runs can check for releases but cannot install them.
 
 ## Persistence
 

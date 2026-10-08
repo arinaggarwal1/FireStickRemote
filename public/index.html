@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="/favicon_io/site.webmanifest">
-    <link rel="stylesheet" href="/styles.css?v=20260908" />
+    <link rel="stylesheet" href="/styles.css?v=20261008" />
   </head>
   <body>
     <div id="app">
@@ -105,6 +105,21 @@
                   Saved Devices
                 </button>
               </div>
+              <section class="desktop-updater" aria-label="Desktop app updates">
+                <div class="desktop-updater-heading">
+                  <span id="desktopAppVersion">Desktop app updates</span>
+                  <button id="checkUpdatesBtn" class="btn secondary" type="button">Check for updates</button>
+                </div>
+                <p id="updateMessage" class="update-message" role="status" aria-live="polite"></p>
+                <div id="updateProgressRow" class="update-progress-row" hidden>
+                  <progress id="updateProgress" max="100" value="0" aria-label="Update download progress"></progress>
+                  <span id="updateProgressLabel">0%</span>
+                </div>
+                <div class="update-action-row">
+                  <button id="downloadUpdateBtn" class="btn secondary" type="button" hidden>Download update</button>
+                  <button id="installUpdateBtn" class="btn" type="button" hidden>Install and restart</button>
+                </div>
+              </section>
             </div>
           </section>
 
@@ -191,7 +206,11 @@
             </div>
 
             <div class="remote-body">
-              <div class="system-row">
+              <div class="remote-command-row">
+                <button class="remote-chip power-chip" data-action="power" aria-label="TV Power" title="Send the Fire TV power command; TV power depends on HDMI-CEC support">
+                  <img class="icon" src="/icons/power.svg" alt="" />
+                  <span>TV Power</span>
+                </button>
                 <button class="remote-chip danger" data-action="home" aria-label="Home">
                   <img class="icon" src="/icons/home.svg" alt="" />
                   <span>Home</span>
@@ -257,6 +276,22 @@
                   <span>Play / Pause</span>
                 </button>
               </div>
+
+              <div class="volume-controls" aria-label="Volume controls">
+                <button class="remote-chip volume-chip" data-action="volume_down" aria-label="Volume down" title="Volume down">
+                  <img class="icon" src="/icons/volume-down.svg" alt="" />
+                  <span>Volume</span>
+                </button>
+                <button class="remote-chip mute-chip" data-action="mute" aria-label="Mute" title="Mute">
+                  <img class="icon" src="/icons/mute.svg" alt="" />
+                  <span>Mute</span>
+                </button>
+                <button class="remote-chip volume-chip" data-action="volume_up" aria-label="Volume up" title="Volume up">
+                  <img class="icon" src="/icons/volume-up.svg" alt="" />
+                  <span>Volume</span>
+                </button>
+              </div>
+              <p class="remote-device-control-hint">TV power and volume follow your Fire TV’s configured equipment controls.</p>
             </div>
             <p class="remote-keyboard-hint"><kbd>↑ ↓ ← →</kbd> Navigate &nbsp; · &nbsp; <kbd>Enter</kbd> Select &nbsp; · &nbsp; <kbd>⌫</kbd> Back</p>
           </section>

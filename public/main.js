@@ -2068,6 +2068,63 @@ function refreshUi() {
   renderQuickLaunchEditor();
 }
 
+let desktopUpdateSnapshot = null;
+let stopDesktopUpdateListener = null;
+
+function renderDesktopUpdateState(update) {
+  desktopUpdateSnapshot = update;
+  const version = update?.currentVersion ? `Desktop app · v${update.currentVersion}` : "Desktop app updates";
+  $("#desktopAppVersion").textContent = version;
+  $("#updateMessage").textContent = update?.message || "";
+
+  const busy = ["checking", "downloading", "installing"].includes(update?.status);
+  const staged = update?.status === "ready";
+  const canDownload = update?.status === "available" && Boolean(update?.canInstall);
+  $("#checkUpdatesBtn").disabled = busy || staged || !window.fireTvDesktopUpdates;
+  $("#checkUpdatesBtn").textContent = update?.status === "checking" ? "Checking…" : "Check for updates";
+  $("#downloadUpdateBtn").hidden = !canDownload;
+  $("#downloadUpdateBtn").disabled = busy;
+  $("#downloadUpdateBtn").textContent = update?.availableVersion ? `Download v${update.availableVersion}` : "Download update";
+  $("#installUpdateBtn").hidden = !staged;
+  $("#installUpdateBtn").disabled = busy || !update?.canInstall;
+  $("#updateProgressRow").hidden = update?.status !== "downloading";
+  const progress = Math.max(0, Math.min(100, Number(update?.progress) || 0));
+  $("#updateProgress").value = progress;
+  $("#updateProgressLabel").textContent = `${Math.round(progress)}%`;
+}
+
+async function runDesktopUpdateAction(action) {
+  const bridge = window.fireTvDesktopUpdates;
+  if (!bridge) return;
+  try {
+    const result = action === "check" ? await bridge.check()
+      : action === "download" ? await bridge.download()
+      : await bridge.install();
+    if (result) renderDesktopUpdateState(result);
+  } catch (error) {
+    renderDesktopUpdateState({
+      ...(desktopUpdateSnapshot || {}),
+      status: "error",
+      message: error?.message || "The update request failed. Please try again.",
+    });
+  }
+}
+
+async function initializeDesktopUpdates() {
+  const bridge = window.fireTvDesktopUpdates;
+  if (!bridge) {
+    renderDesktopUpdateState({ status: "unsupported", message: "Update controls are available in the installed desktop app." });
+    return;
+  }
+  stopDesktopUpdateListener?.();
+  stopDesktopUpdateListener = bridge.onState(renderDesktopUpdateState);
+  try {
+    renderDesktopUpdateState(await bridge.getStatus());
+  } catch (error) {
+    renderDesktopUpdateState({ status: "error", message: error?.message || "Could not connect to the desktop update service." });
+  }
+}
+
 function wireUI() {
   $("#connectBtn").addEventListener("click", connect);
   $("#openDeviceManagerBtn").addEventListener("click", openDeviceModal);
@@ -2211,6 +2268,9 @@ function wireUI() {
   });
   $("#installApkBtn").addEventListener("click", handleInstallApk);
   $("#repairAdbBtn").addEventListener("click", handleRepairAdb);
+  $("#checkUpdatesBtn").addEventListener("click", () => void runDesktopUpdateAction("check"));
+  $("#downloadUpdateBtn").addEventListener("click", () => void runDesktopUpdateAction("download"));
+  $("#installUpdateBtn").addEventListener("click", () => void runDesktopUpdateAction("install"));
 
   $("#pairingStartBtn").addEventListener("click", handlePairingStart);
   $("#pairingVerifyBtn").addEventListener("click", handlePairingVerify);
@@ -2303,6 +2363,7 @@ async function init() {
   await loadPreferences();
   refreshUi();
   await loadSavedDevices();
+  await initializeDesktopUpdates();
   await tryAutoConnectDefaultDevice();
 }
 

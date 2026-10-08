@@ -98,7 +98,7 @@ export class HybridTransport {
     if (session?.authenticated || !device.token) return session;
     const key = device.host;
     const previous = this.httpsRecovery.get(key);
-    if (previous && previous.token === device.token && Date.now() - previous.checkedAt < 15000) {
+    if (previous && previous.token === device.token && Date.now() - previous.checkedAt < 3000) {
       return mergeSessionState(session, previous.pending ? await previous.pending : previous.updates);
     }
     const recovery = { checkedAt: Date.now(), token: device.token, pending: null, updates: {} };
@@ -106,7 +106,11 @@ export class HybridTransport {
       try {
         // Only check status; never replay the user's previous command or pair
         // automatically. A temporary outage must not pin the session to ADB.
-        const probe = await this.fireTvHttpsTransport.probe(device);
+        // Use the same wake-and-retry path as an explicit connect. A Fire TV
+        // can close its control listener while idle even though it remains on
+        // the network; a plain status probe would otherwise keep the app on
+        // ADB until the user manually reconnects.
+        const probe = await this.probeHttps(device);
         this.logger.info?.("HTTPS recovery probe completed.", {
           host: device.host, authenticated: Boolean(probe.authenticated),
           errorCode: probe.errorCode || null,
@@ -129,6 +133,28 @@ export class HybridTransport {
     // Bound this cache for long-running standalone servers.
     if (this.httpsRecovery.size > 100) this.httpsRecovery.delete(this.httpsRecovery.keys().next().value);
     return mergeSessionState(session, updates);
+  }
+
+  markHttpsUnavailable(session, error) {
+    const unavailableCodes = new Set([
+      "HTTPS_UNREACHABLE",
+      "TLS_FAILED",
+      "REQUEST_TIMEOUT",
+      "HTTPS_RESPONSE_INTERRUPTED",
+      "HTTPS_REQUEST_FAILED",
+    ]);
+    if (!unavailableCodes.has(error?.code)) return session;
+    return mergeSessionState(session, {
+      httpsReachable: false,
+      tlsReady: error.code !== "TLS_FAILED",
+      apiKeyAccepted: false,
+      authenticated: false,
+      tokenValid: false,
+      pairingRequired: false,
+      httpsTextAvailable: false,
+      httpsAppListAvailable: false,
+      lastHttpsError: error.code,
+    });
   }
 
   async ensureAdbConnected(device, session, reason) {
@@ -299,6 +325,7 @@ export class HybridTransport {
             }),
           };
         } else {
+          session = this.markHttpsUnavailable(session, error);
           this.logger.warn?.("Fire TV HTTPS remote action failed; evaluating ADB fallback.", {
             host: device.host,
             action,
@@ -363,17 +390,19 @@ export class HybridTransport {
             tokenValid: false,
             pairingRequired: true,
           });
-        } else if (
-          error?.code !== "TEXT_FAILED" &&
-          error?.code !== "KEYBOARD_STATE_FAILED" &&
-          error?.code !== "FIRETV_BACKEND_NPE"
-        ) {
-          throw error;
         } else if (error?.code === "FIRETV_BACKEND_NPE") {
           this.logger.warn?.("Fire TV HTTPS text path failed with backend exception; evaluating ADB fallback.", {
             host: device.host,
             message: error.message,
           });
+        } else if (
+          error?.code === "TEXT_FAILED" ||
+          error?.code === "KEYBOARD_STATE_FAILED" ||
+          ["HTTPS_UNREACHABLE", "TLS_FAILED", "REQUEST_TIMEOUT", "HTTPS_RESPONSE_INTERRUPTED", "HTTPS_REQUEST_FAILED"].includes(error?.code)
+        ) {
+          session = this.markHttpsUnavailable(session, error);
+        } else {
+          throw error;
         }
       }
     }
@@ -402,6 +431,7 @@ export class HybridTransport {
         httpsApps = await this.fireTvHttpsTransport.listApps(device);
       } catch (error) {
         httpsError = error;
+        nextSession = this.markHttpsUnavailable(nextSession, error);
         this.logger.warn?.("Fire TV HTTPS app listing failed; evaluating ADB fallback.", {
           host: device.host,
           code: error?.code || null,

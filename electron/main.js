@@ -1,7 +1,16 @@
-import { app, BrowserWindow, dialog, nativeImage } from "electron";
-import { execFile, spawn } from "child_process";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage } from "electron";
+import { autoUpdater } from "electron-updater";
+import { execFile, spawn, spawnSync } from "child_process";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  inspectLatestRelease,
+  isTrustedUpdateSession,
+  MAX_UPDATE_SIZE,
+  UPDATE_RELEASE_PAGE,
+  validateUpdaterInfo,
+} from "./updateUtils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +36,17 @@ let isCleaningUp = false;
 let cleanupCompleted = false;
 let allowQuit = false;
 let cleanupPromise = null;
+let updateHandlersRegistered = false;
+let verifiedUpdateRelease = null;
+let macUpdateInstallCapability = null;
+let updateState = {
+  status: "idle",
+  currentVersion: app.getVersion(),
+  latestVersion: null,
+  message: "",
+  progress: 0,
+  releaseUrl: UPDATE_RELEASE_PAGE,
+};
 
 app.commandLine.appendSwitch("disable-http-cache");
 
@@ -162,6 +182,7 @@ async function createMainWindow() {
     title: APP_DISPLAY_NAME,
     icon: appIcon,
     webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -175,6 +196,188 @@ async function createMainWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+  });
+}
+
+function getMacAppBundlePath() {
+  const bundlePath = path.resolve(path.dirname(process.execPath), "..", "..");
+  return bundlePath.endsWith(".app") ? bundlePath : null;
+}
+
+function canInstallMacUpdate() {
+  if (macUpdateInstallCapability !== null) return macUpdateInstallCapability;
+  if (!app.isPackaged || process.platform !== "darwin" || process.mas) return (macUpdateInstallCapability = false);
+  if (typeof app.isInApplicationsFolder !== "function" || !app.isInApplicationsFolder()) return (macUpdateInstallCapability = false);
+  const bundlePath = getMacAppBundlePath();
+  if (!bundlePath) return (macUpdateInstallCapability = false);
+  try {
+    fs.accessSync(path.dirname(bundlePath), fs.constants.W_OK);
+    const verification = spawnSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", bundlePath], {
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    if (verification.status !== 0) return (macUpdateInstallCapability = false);
+    const signature = spawnSync("/usr/bin/codesign", ["--display", "--verbose=2", bundlePath], {
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    const details = `${signature.stdout || ""}\n${signature.stderr || ""}`;
+    return (macUpdateInstallCapability = signature.status === 0 && /Authority=Developer ID Application:/.test(details));
+  } catch {
+    return (macUpdateInstallCapability = false);
+  }
+}
+
+function getUpdateSnapshot() {
+  return {
+    ...updateState,
+    currentVersion: app.getVersion(),
+    canInstall: canInstallMacUpdate(),
+  };
+}
+
+function publishUpdateState(updates) {
+  updateState = { ...updateState, ...updates };
+  const snapshot = getUpdateSnapshot();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("desktop-update:state", snapshot);
+  }
+  return snapshot;
+}
+
+function assertTrustedUpdateSender(event) {
+  const trusted = isTrustedUpdateSession({
+    senderMatchesWindow: Boolean(mainWindow && event.sender === mainWindow.webContents),
+    senderUrl: event.senderFrame?.url,
+    appUrl: serverUrl,
+  });
+  if (!trusted) {
+    throw new Error("Update controls are available only in this desktop app session.");
+  }
+}
+
+async function checkForAppUpdate() {
+  if (["checking", "downloading", "ready", "installing"].includes(updateState.status)) return getUpdateSnapshot();
+  verifiedUpdateRelease = null;
+  publishUpdateState({ status: "checking", latestVersion: null, message: "Checking for updates…", progress: 0 });
+  try {
+    const result = await inspectLatestRelease({ currentVersion: app.getVersion(), platform: process.platform, arch: process.arch });
+    if (result.status !== "available") {
+      publishUpdateState({ ...result, latestVersion: result.latestVersion || null });
+      return getUpdateSnapshot();
+    }
+
+    verifiedUpdateRelease = result;
+    if (!canInstallMacUpdate()) {
+      publishUpdateState({
+        ...result,
+        message: `Version ${result.availableVersion} is available. Install it from the published DMG; in-app installation needs a signed app in a writable Applications folder.`,
+      });
+      return getUpdateSnapshot();
+    }
+
+    const check = await autoUpdater.checkForUpdates();
+    if (!check?.isUpdateAvailable) {
+      throw new Error("The verified release was not available through the packaged updater feed.");
+    }
+    validateUpdaterInfo(check.updateInfo, result);
+    publishUpdateState({ ...result, status: "available", message: `Version ${result.availableVersion} is available.` });
+  } catch (error) {
+    verifiedUpdateRelease = null;
+    publishUpdateState({ status: "error", latestVersion: null, progress: 0, message: error?.message || "Could not check for updates. Check your internet connection and try again." });
+  }
+  return getUpdateSnapshot();
+}
+
+async function downloadAppUpdate() {
+  if (updateState.status !== "available" || !verifiedUpdateRelease) throw new Error("Check for an available update first.");
+  if (!canInstallMacUpdate()) throw new Error("Install updates from a signed desktop app in a writable Applications folder.");
+
+  publishUpdateState({ status: "checking", message: "Verifying the release before download…", progress: 0 });
+  try {
+    const latest = await inspectLatestRelease({ currentVersion: app.getVersion(), platform: process.platform, arch: process.arch });
+    if (latest.status !== "available" || latest.availableVersion !== verifiedUpdateRelease.availableVersion) {
+      throw new Error("The published release changed since the update check. Check for updates again.");
+    }
+    const check = await autoUpdater.checkForUpdates();
+    if (!check?.isUpdateAvailable) throw new Error("The verified update is no longer available.");
+    validateUpdaterInfo(check.updateInfo, latest);
+    verifiedUpdateRelease = latest;
+    publishUpdateState({ status: "downloading", latestVersion: latest.availableVersion, progress: 0, message: `Downloading version ${latest.availableVersion}…` });
+    await autoUpdater.downloadUpdate();
+    if (updateState.status === "downloading") {
+      publishUpdateState({ status: "ready", progress: 100, message: `Version ${latest.availableVersion} is ready. Install and restart when you’re ready.` });
+    }
+  } catch (error) {
+    verifiedUpdateRelease = null;
+    publishUpdateState({ status: "error", progress: 0, message: error?.message || "Could not download the update. Your installed app has not been changed." });
+    throw error;
+  }
+  return getUpdateSnapshot();
+}
+
+async function installAppUpdate() {
+  if (updateState.status !== "ready" || !verifiedUpdateRelease) throw new Error("Download an update before installing it.");
+  if (!canInstallMacUpdate()) throw new Error("Install updates from a signed desktop app in a writable Applications folder.");
+  publishUpdateState({ status: "installing", message: "Installing the update. Fire TV Remote will restart shortly." });
+  await cleanupAndExit("install-update");
+  allowQuit = true;
+  autoUpdater.quitAndInstall(false, true);
+  return getUpdateSnapshot();
+}
+
+function registerUpdateHandlers() {
+  if (updateHandlersRegistered) return;
+  updateHandlersRegistered = true;
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.allowDowngrade = false;
+
+  autoUpdater.on("download-progress", (progress) => {
+    if (progress.transferred > MAX_UPDATE_SIZE || progress.total > MAX_UPDATE_SIZE) {
+      autoUpdater.cancelDownload();
+      publishUpdateState({ status: "error", progress: 0, message: "The update exceeded the supported download size. Your installed app has not been changed." });
+      return;
+    }
+    publishUpdateState({
+      status: "downloading",
+      progress: progress.percent || (progress.total ? (progress.transferred / progress.total) * 100 : 0),
+      message: `Downloading version ${verifiedUpdateRelease?.availableVersion || "update"}…`,
+    });
+  });
+  autoUpdater.on("update-downloaded", (info) => {
+    try {
+      if (!verifiedUpdateRelease) throw new Error("No verified release is selected.");
+      validateUpdaterInfo(info, verifiedUpdateRelease);
+      publishUpdateState({ status: "ready", progress: 100, latestVersion: info.version, message: `Version ${info.version} is ready. Install and restart when you’re ready.` });
+    } catch (error) {
+      verifiedUpdateRelease = null;
+      publishUpdateState({ status: "error", progress: 0, message: error?.message || "The downloaded update did not pass verification." });
+    }
+  });
+  autoUpdater.on("error", (error) => {
+    if (["checking", "downloading"].includes(updateState.status)) {
+      publishUpdateState({ status: "error", progress: 0, message: error?.message || "The update service encountered an error." });
+    }
+  });
+
+  ipcMain.handle("desktop-update:get", (event) => {
+    assertTrustedUpdateSender(event);
+    return getUpdateSnapshot();
+  });
+  ipcMain.handle("desktop-update:check", (event) => {
+    assertTrustedUpdateSender(event);
+    return checkForAppUpdate();
+  });
+  ipcMain.handle("desktop-update:download", async (event) => {
+    assertTrustedUpdateSender(event);
+    return downloadAppUpdate();
+  });
+  ipcMain.handle("desktop-update:install", async (event) => {
+    assertTrustedUpdateSender(event);
+    return installAppUpdate();
   });
 }
 
@@ -350,6 +553,7 @@ async function cleanupAndExit(reason = "unknown") {
 
 app.whenReady().then(async () => {
   try {
+    registerUpdateHandlers();
     if (process.platform === "darwin") {
       const dockIcon = nativeImage.createFromPath(appIcon);
       if (!dockIcon.isEmpty()) {
